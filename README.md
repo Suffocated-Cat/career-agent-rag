@@ -40,13 +40,13 @@ career-agent-rag/
 │   │   └── match.py
 │   ├── services/            # Business logic
 │   │   └── embedding.py     # EmbeddingService
-│   └── core/
+│   ├── core/
 │       └── config.py        # pydantic-settings configuration
+│   └── Dockerfile               # Backend Docker image
 ├── tests/                   # Pytest test suite
 ├── frontend/                # Reserved for future frontend
 ├── experiments/             # Standalone experiment scripts
-├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml       # Multi-service orchestration
 └── requirements.txt
 ```
 
@@ -86,13 +86,13 @@ The development server uses `uvicorn --reload` with volume-mounted code. Edit an
 ### Running Experiments
 
 ```bash
-docker compose exec app python experiments/day1_embedding_demo.py
+docker compose exec backend python experiments/day1_embedding_demo.py
 ```
 
 ### Running Tests
 
 ```bash
-docker compose exec app pytest tests/ -v
+docker compose exec backend pytest tests/ -v
 ```
 
 ## Development Plan
