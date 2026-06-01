@@ -1,8 +1,8 @@
 services:
-  app:
+  backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: app/Dockerfile
     container_name: career-agent-dev
     ports:
       - "8000:8000"
