@@ -39,13 +39,25 @@ career-agent-rag/
 │   │   ├── resume.py
 │   │   └── match.py
 │   ├── services/            # Business logic
-│   │   └── embedding.py     # EmbeddingService
+│   │   ├── embedding.py     # EmbeddingService
+│   │   └── jd_parser.py     # JDParser (rule-based JD extraction)
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
 ├── tests/                   # Pytest test suite
+│   ├── conftest.py          # TestClient fixture
+│   ├── test_health.py
+│   ├── api/
+│   │   └── v1/
+│   │       ├── test_jd.py
+│   │       ├── test_resume.py
+│   │       └── test_match.py
+│   └── services/
+│       └── test_jd_parser.py
 ├── frontend/                # Reserved for future frontend
 ├── experiments/             # Standalone experiment scripts
+│   ├── day1_embedding_demo.py
+│   └── day2_tokenizer_demo.py
 ├── docker-compose.yml       # Multi-service orchestration
 └── requirements.txt
 ```
@@ -86,7 +98,11 @@ The development server uses `uvicorn --reload` with volume-mounted code. Edit an
 ### Running Experiments
 
 ```bash
+# Day 1: Embedding similarity demo
 docker compose exec backend python experiments/day1_embedding_demo.py
+
+# Day 2: Tokenizer & JD Parser demo
+docker compose exec backend python experiments/day2_tokenizer_demo.py
 ```
 
 ### Running Tests
