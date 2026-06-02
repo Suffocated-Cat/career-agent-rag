@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-from app.models.jd import JdParseRequest, JdParseResponse, JobDescription
+from app.models.jd import JdParseRequest, JdParseResponse
+from app.services.jd_parser import parse_jd as parse_jd_text
 
 router = APIRouter()
 
@@ -9,7 +10,8 @@ router = APIRouter()
 async def parse_jd(request: JdParseRequest):
     """Parse a job description text.
 
-    (Placeholder — full parsing logic arrives on Day 2.)
+    Extracts job title, company, required skills, responsibilities, and
+    nice-to-have qualifications using rule-based parsing.
     """
-    jd = JobDescription(raw_text=request.raw_text)
+    jd = parse_jd_text(request.raw_text)
     return JdParseResponse(data=jd)
