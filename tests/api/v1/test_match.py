@@ -17,3 +17,4 @@ def test_match_returns_200(client):
     assert isinstance(result["missing_skills"], list)
     assert 0.0 <= result["overall_score"] <= 1.0
     assert 0.0 <= result["skill_match_rate"] <= 1.0
+    assert "semantic_similarity" in result

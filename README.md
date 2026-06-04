@@ -43,7 +43,7 @@ career-agent-rag/
 │   │   ├── _embedding_helpers.py # Shared embedding utilities
 │   │   ├── jd_parser.py          # JDParser (rule + embedding)
 │   │   ├── resume_parser.py      # ResumeParser (rule + embedding)
-│   │   └── keyword_matcher.py    # KeywordMatcher (baseline matching)
+│   │   └── keyword_matcher.py    # KeywordMatcher (keyword + semantic)
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -76,7 +76,7 @@ career-agent-rag/
 | GET | `/health` | Health check |
 | POST | `/api/v1/jd/parse` | Parse job description |
 | POST | `/api/v1/resume/parse` | Parse resume |
-| POST | `/api/v1/match` | Match JD against resume |
+| POST | `/api/v1/match` | Match JD against resume (keyword + semantic) |
 
 Swagger docs: `http://localhost:8000/docs`
 

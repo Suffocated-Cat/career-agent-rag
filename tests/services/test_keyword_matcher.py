@@ -48,6 +48,26 @@ class TestKeywordMatcher:
         assert "docker" in result.matched_skills
         assert result.skill_match_rate == 1.0
 
+    def test_extended_match_avoids_short_skill_substring_false_positive(self):
+        """Short skills should not match inside unrelated words."""
+        jd = JobDescription(raw_text="", skills=["go"])
+        resume = Resume(raw_text="I negotiated contracts and managed roadmap goals.")
+        result = match(jd, resume)
+        assert result.matched_skills == []
+        assert result.missing_skills == ["go"]
+        assert result.skill_match_rate == 0.0
+
+    def test_semantic_similarity_is_included_when_embedding_service_is_available(self):
+        class FakeEmbeddingService:
+            def similarity(self, text1, text2):
+                return 0.42
+
+        jd = JobDescription(raw_text="Build ML APIs", skills=["python"])
+        resume = Resume(raw_text="Built machine learning services", skills=[])
+        result = match(jd, resume, embedding_service=FakeEmbeddingService())
+        assert result.semantic_similarity == 0.42
+        assert "Semantic similarity: 0.42" in result.summary
+
     def test_overall_score_range(self):
         jd = JobDescription(raw_text="", skills=["python"])
         resume = Resume(raw_text="", skills=["python"])
