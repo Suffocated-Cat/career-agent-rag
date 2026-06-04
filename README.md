@@ -39,8 +39,11 @@ career-agent-rag/
 │   │   ├── resume.py
 │   │   └── match.py
 │   ├── services/            # Business logic
-│   │   ├── embedding.py     # EmbeddingService
-│   │   └── jd_parser.py     # JDParser (rule-based JD extraction)
+│   │   ├── embedding.py          # EmbeddingService
+│   │   ├── _embedding_helpers.py # Shared embedding utilities
+│   │   ├── jd_parser.py          # JDParser (rule + embedding)
+│   │   ├── resume_parser.py      # ResumeParser (rule + embedding)
+│   │   └── keyword_matcher.py    # KeywordMatcher (baseline matching)
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -53,11 +56,15 @@ career-agent-rag/
 │   │       ├── test_resume.py
 │   │       └── test_match.py
 │   └── services/
-│       └── test_jd_parser.py
+│       ├── test_jd_parser.py
+│       ├── test_resume_parser.py
+│       └── test_keyword_matcher.py
 ├── frontend/                # Reserved for future frontend
 ├── experiments/             # Standalone experiment scripts
 │   ├── day1_embedding_demo.py
-│   └── day2_tokenizer_demo.py
+│   ├── day2_tokenizer_demo.py
+│   ├── day3_embedding_demo.py
+│   └── day4_position_encoding_demo.py
 ├── docker-compose.yml       # Multi-service orchestration
 └── requirements.txt
 ```
@@ -103,6 +110,12 @@ docker compose exec backend python experiments/day1_embedding_demo.py
 
 # Day 2: Tokenizer & JD Parser demo
 docker compose exec backend python experiments/day2_tokenizer_demo.py
+
+# Day 3: Embedding semantic matching demo
+docker compose exec backend python experiments/day3_embedding_demo.py
+
+# Day 4: Position encoding demo
+docker compose exec backend python experiments/day4_position_encoding_demo.py
 ```
 
 ### Running Tests

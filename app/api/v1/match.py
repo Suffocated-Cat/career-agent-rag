@@ -1,17 +1,16 @@
 from fastapi import APIRouter
 
-from app.models.match import MatchRequest, MatchResponse, MatchResult
+from app.models.match import MatchRequest, MatchResponse
+from app.services.keyword_matcher import match as match_jd_resume
 
 router = APIRouter()
 
 
 @router.post("/match", response_model=MatchResponse)
-async def match_jd_resume(request: MatchRequest):
-    """Match a job description against a resume.
+async def match_jd_resume_endpoint(request: MatchRequest):
+    """Match a parsed job description against a parsed resume.
 
-    (Placeholder — full matching logic arrives on Day 4+.)
+    Computes skill overlap, match rate, and an overall match score.
     """
-    result = MatchResult(
-        summary="Matching logic not yet implemented. Will be added from Day 4 onward.",
-    )
+    result = match_jd_resume(request.jd, request.resume)
     return MatchResponse(data=result)
