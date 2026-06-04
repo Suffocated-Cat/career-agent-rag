@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-from app.models.resume import ResumeParseRequest, ResumeParseResponse, Resume
+from app.models.resume import ResumeParseRequest, ResumeParseResponse
+from app.services.resume_parser import parse_resume as parse_resume_text
 
 router = APIRouter()
 
@@ -9,7 +10,8 @@ router = APIRouter()
 async def parse_resume(request: ResumeParseRequest):
     """Parse a resume text.
 
-    (Placeholder — full parsing logic arrives on Day 3.)
+    Extracts skills, projects, education, and work experience
+    using rule-based section detection and keyword matching.
     """
-    resume = Resume(raw_text=request.raw_text)
+    resume = parse_resume_text(request.raw_text)
     return ResumeParseResponse(data=resume)

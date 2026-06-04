@@ -1,5 +1,5 @@
 """
-JDParser — Rule-based job description parser.
+JDParser — Rule-based + embedding-enhanced job description parser.
 
 Extracts structured fields from raw JD text:
   - title (job title)
@@ -8,12 +8,23 @@ Extracts structured fields from raw JD text:
   - responsibilities (key duties)
   - nice_to_haves (bonus / preferred qualifications)
 
-Implementation: keyword matching + section-based pattern extraction.
+Pipeline:
+  1. Regex-based section splitting (primary)
+  2. Embedding-based section classification (fallback)
+  3. Keyword vocabulary skill matching (primary)
+  4. Embedding-based semantic skill discovery (fallback)
+  5. Bullet-item extraction for responsibilities / nice-to-haves
+
 Replaced by LLM-based parsing in Week 3.
 """
 
 import re
+from typing import TYPE_CHECKING
+
 from app.models.jd import JobDescription
+
+if TYPE_CHECKING:
+    from app.services.embedding import EmbeddingService
 
 # ── Tech skills vocabulary ──────────────────────────────────────────────
 # Covers: languages, frameworks, platforms, tools, concepts
@@ -295,21 +306,30 @@ def _match_skills(text: str) -> list[str]:
 
 
 def _extract_skills_from_sections(
-    requirements_text: str, preamble_text: str
+    requirements_text: str, preamble_text: str, nice_to_have_text: str = "",
 ) -> list[str]:
-    """Combine skill matches from requirements and preamble sections."""
-    combined = f"{requirements_text}\n{preamble_text}"
+    """Combine skill matches from all relevant sections."""
+    combined = f"{requirements_text}\n{preamble_text}\n{nice_to_have_text}"
     return _match_skills(combined)
 
 
 # ── Public API ───────────────────────────────────────────────────────────
 
 
-def parse_jd(raw_text: str) -> JobDescription:
+def parse_jd(
+    raw_text: str,
+    embedding_service: "EmbeddingService | None" = None,
+) -> JobDescription:
     """Parse a raw job description text into a structured JobDescription.
 
     Args:
         raw_text: The full job description as a plain string.
+        embedding_service: Optional EmbeddingService for semantic fallback.
+            When provided:
+            - Section classification falls back to embedding similarity
+              if regex patterns find no sections.
+            - Skill extraction adds semantic discovery for sentences
+              that don't match any vocabulary keywords.
 
     Returns:
         A JobDescription with extracted fields populated.
@@ -318,12 +338,40 @@ def parse_jd(raw_text: str) -> JobDescription:
     company = _extract_company(raw_text)
     sections = _split_sections(raw_text)
 
+    # ── Embedding fallback: section classification ─────────────────
+    section_types_found = [k for k in sections if k != "preamble"]
+    if not section_types_found and embedding_service is not None:
+        from app.services._embedding_helpers import (
+            _classify_sections,
+            JD_SECTION_DESCRIPTIONS,
+            SECTION_KEYWORD_HINTS,
+        )
+
+        sections = _classify_sections(
+            raw_text,
+            embedding_service,
+            JD_SECTION_DESCRIPTIONS,
+            SECTION_KEYWORD_HINTS.get("jd"),
+        )
+
     requirements_text = sections.get("requirements", "")
     responsibilities_text = sections.get("responsibilities", "")
     nice_to_have_text = sections.get("nice_to_have", "")
     preamble = sections.get("preamble", "")
 
-    skills = _extract_skills_from_sections(requirements_text, preamble)
+    # ── Keyword skill matching ─────────────────────────────────────
+    skills = _extract_skills_from_sections(requirements_text, preamble, nice_to_have_text)
+
+    # ── Embedding fallback: semantic skill discovery ────────────────
+    if embedding_service is not None:
+        from app.services._embedding_helpers import _discover_semantic_skills
+
+        all_text = f"{requirements_text}\n{preamble}\n{responsibilities_text}\n{nice_to_have_text}"
+        discovered = _discover_semantic_skills(
+            all_text, skills, embedding_service, TECH_SKILLS, SKILL_ALIASES
+        )
+        skills = sorted(set(skills) | set(discovered))
+
     responsibilities = _extract_bullet_items(responsibilities_text)
     nice_to_haves = _extract_bullet_items(nice_to_have_text)
 
