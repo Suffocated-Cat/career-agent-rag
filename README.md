@@ -87,6 +87,24 @@ career-agent-rag/
 
 Swagger docs: `http://localhost:8000/docs`
 
+## Current Matching Signals
+
+The current matching pipeline combines:
+
+- Exact and rule-based skill overlap
+- Raw resume text skill recovery
+- Embedding-based semantic skill matching
+- JD responsibility to resume experience alignment
+- Document-level semantic similarity
+
+The overall score is skill-first:
+
+- With experience alignment: `75% skill coverage + 15% experience alignment + 10% document similarity`
+- Without experience alignment: `85% skill coverage + 15% document similarity`
+- Keyword-only fallback: `90% skill coverage`
+
+`POST /api/v1/match/report` turns the match result into a template-based markdown report with skill gaps, experience alignment, and recommendations.
+
 ## Development (Docker)
 
 ### Prerequisites

@@ -157,21 +157,25 @@ def match(
 
     if embedding_service is not None:
         # ── Vector-enhanced scoring formula ─────────────────────────
-        semantic_skill_score = semantic_skill_match_rate or 0.0
-        experience_score = experience_match_rate or 0.0
-
-        overall_score = (
-            0.35 * direct_score
-            + 0.15 * extended_bonus
-            + 0.25 * semantic_skill_score
-            + 0.15 * experience_score
-            + 0.10 * doc_semantic_bonus
-        )
+        # Skill coverage is the primary signal. It already includes exact,
+        # raw-text, and semantic skill matches, so perfect skill coverage
+        # should not be penalized for having no additional semantic matches.
+        has_experience_signal = bool(jd.responsibilities and resume.experience)
+        if has_experience_signal:
+            experience_score = experience_match_rate or 0.0
+            overall_score = (
+                0.75 * skill_match_rate
+                + 0.15 * experience_score
+                + 0.10 * doc_semantic_bonus
+            )
+        else:
+            overall_score = 0.85 * skill_match_rate + 0.15 * doc_semantic_bonus
     else:
-        # ── Keyword-only scoring (preserved for backward compat) ─────
-        overall_score = (
-            0.70 * direct_score + 0.20 * extended_bonus + 0.10 * doc_semantic_bonus
-        )
+        # ── Keyword-only scoring ────────────────────────────────────
+        # Keep a small reserve for semantic/context signals that are not
+        # available in keyword-only mode, while making full skill coverage
+        # score high enough to read as a strong baseline match.
+        overall_score = 0.90 * skill_match_rate
 
     overall_score = min(overall_score, 1.0)
 

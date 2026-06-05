@@ -167,8 +167,7 @@ class TestKeywordMatcher:
         assert 0.0 <= result.experience_match_rate <= 1.0
 
     def test_no_embedding_service_graceful_degradation(self):
-        """Without embedding_service, new fields should be empty/None and
-        score should match old formula."""
+        """Without embedding_service, new fields should be empty/None."""
         jd = JobDescription(raw_text="", skills=["python", "docker"])
         resume = Resume(raw_text="", skills=["python", "docker"])
         result = match(jd, resume)
@@ -179,9 +178,23 @@ class TestKeywordMatcher:
         assert result.experience_matches == []
         assert result.experience_match_rate is None
 
-        # All skills matched exactly → direct_score=1.0, old formula:
-        # 0.7*1.0 + 0.2*0 + 0.1*0 = 0.7
-        assert result.overall_score == 0.7
+        # All skills matched exactly should read as a strong baseline match.
+        assert result.overall_score == 0.9
+
+    def test_full_exact_match_scores_high_with_embedding_service(self):
+        """Exact skill coverage should not be penalized in vector-enhanced mode."""
+
+        class FakeEmbeddingService:
+            def similarity(self, text1, text2):
+                return 1.0
+
+        jd = JobDescription(raw_text="Python Docker", skills=["python", "docker"])
+        resume = Resume(raw_text="Python Docker", skills=["python", "docker"])
+        result = match(jd, resume, embedding_service=FakeEmbeddingService())
+
+        assert result.skill_match_rate == 1.0
+        assert result.semantic_similarity == 1.0
+        assert result.overall_score == 1.0
 
     def test_overall_score_with_semantic_matches(self):
         """Overall score should reflect semantic contributions when embedding
