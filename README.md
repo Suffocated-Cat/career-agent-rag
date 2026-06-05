@@ -43,7 +43,8 @@ career-agent-rag/
 │   │   ├── _embedding_helpers.py # Shared embedding utilities
 │   │   ├── jd_parser.py          # JDParser (rule + embedding)
 │   │   ├── resume_parser.py      # ResumeParser (rule + embedding)
-│   │   └── keyword_matcher.py    # KeywordMatcher (keyword + semantic)
+│   │   ├── keyword_matcher.py    # KeywordMatcher (keyword + vector)
+│   │   └── vector_matcher.py     # VectorMatcher (semantic match)
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -58,13 +59,15 @@ career-agent-rag/
 │   └── services/
 │       ├── test_jd_parser.py
 │       ├── test_resume_parser.py
-│       └── test_keyword_matcher.py
+│       ├── test_keyword_matcher.py
+│       └── test_vector_matcher.py
 ├── frontend/                # Reserved for future frontend
 ├── experiments/             # Standalone experiment scripts
 │   ├── day1_embedding_demo.py
 │   ├── day2_tokenizer_demo.py
 │   ├── day3_embedding_demo.py
-│   └── day4_position_encoding_demo.py
+│   ├── day4_position_encoding_demo.py
+│   └── day5_self_attention_demo.py
 ├── docker-compose.yml       # Multi-service orchestration
 └── requirements.txt
 ```
@@ -76,7 +79,7 @@ career-agent-rag/
 | GET | `/health` | Health check |
 | POST | `/api/v1/jd/parse` | Parse job description |
 | POST | `/api/v1/resume/parse` | Parse resume |
-| POST | `/api/v1/match` | Match JD against resume (keyword + semantic) |
+| POST | `/api/v1/match` | Match JD against resume (keyword + vector) |
 
 Swagger docs: `http://localhost:8000/docs`
 
@@ -116,6 +119,9 @@ docker compose exec backend python experiments/day3_embedding_demo.py
 
 # Day 4: Position encoding demo
 docker compose exec backend python experiments/day4_position_encoding_demo.py
+
+# Day 5: Self-attention mechanism demo
+docker compose exec backend python experiments/day5_self_attention_demo.py
 ```
 
 ### Running Tests
