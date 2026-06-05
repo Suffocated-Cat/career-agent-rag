@@ -56,3 +56,49 @@ def test_match_response_includes_semantic_fields(client):
     assert "experience_matches" in result
     assert isinstance(result["experience_matches"], list)
     assert "experience_match_rate" in result
+
+
+def test_generate_report_returns_200(client):
+    """POST /api/v1/match/report should return 200 with valid report schema."""
+    response = client.post(
+        "/api/v1/match/report",
+        json={
+            "jd": {
+                "raw_text": "Looking for ML Engineer with PyTorch.",
+                "title": "ML Engineer",
+                "skills": ["pytorch", "docker"],
+                "responsibilities": ["Build ML models"],
+            },
+            "resume": {
+                "raw_text": "Deep learning engineer.",
+                "skills": ["tensorflow", "kubernetes"],
+                "experience": [
+                    {
+                        "title": "ML Engineer",
+                        "company": "AI Corp",
+                        "highlights": ["Built recommendation system"],
+                    }
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    report = data["data"]
+
+    # Check report structure
+    assert "job_title" in report
+    assert report["job_title"] == "ML Engineer"
+    assert "overall_score" in report
+    assert "overall_rating" in report
+    assert report["overall_rating"] in ["Excellent", "Good", "Fair", "Low"]
+    assert "skill_summary" in report
+    assert "matched_skills" in report
+    assert "missing_skills" in report
+    assert "skill_gap_analysis" in report
+    assert "recommendations" in report
+    assert "full_report" in report
+    assert len(report["full_report"]) > 0
+    assert 0.0 <= report["overall_score"] <= 1.0

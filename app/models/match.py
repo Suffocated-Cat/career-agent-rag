@@ -49,3 +49,33 @@ class MatchResponse(BaseModel):
 
     status: str = "success"
     data: MatchResult
+
+
+class MatchReport(BaseModel):
+    """Structured JD-to-resume matching report."""
+
+    job_title: str = ""
+    overall_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    overall_rating: str = ""  # Excellent / Good / Fair / Low
+    skill_summary: str = ""  # "X/Y skills matched (Z via semantic)"
+    matched_skills: list[str] = Field(default_factory=list)
+    missing_skills: list[str] = Field(default_factory=list)
+    semantic_skill_matches: list[SkillMatchDetail] = Field(default_factory=list)
+    experience_alignment: list[ExperienceMatchDetail] = Field(default_factory=list)
+    skill_gap_analysis: str = ""  # human-readable gap description
+    recommendations: str = ""  # next steps / learning focus
+    full_report: str = ""  # complete markdown report
+
+
+class ReportRequest(BaseModel):
+    """Request body for report generation endpoint."""
+
+    jd: JobDescription
+    resume: Resume
+
+
+class ReportResponse(BaseModel):
+    """Response for report generation endpoint."""
+
+    status: str = "success"
+    data: MatchReport
