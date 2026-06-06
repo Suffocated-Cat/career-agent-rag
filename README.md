@@ -73,7 +73,8 @@ career-agent-rag/
 │   │   ├── datasets.py          # fixture loaders (corpus + labeled queries)
 │   │   ├── runner.py            # evaluate_retriever() → EvalReport
 │   │   ├── selector_eval.py     # evaluate_selector() → SelectorReport
-│   │   └── ablation.py          # run_ablation() across retrieval methods
+│   │   ├── ablation.py          # run_ablation() across retrieval methods
+│   │   └── llm_judge.py         # LLM-as-Judge: grounding + quality scoring
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -97,7 +98,8 @@ career-agent-rag/
 │   │   ├── test_datasets.py         # fixture loaders
 │   │   ├── test_runner.py           # evaluate_retriever over fixtures
 │   │   ├── test_selector_eval.py    # evaluate_selector over fixtures
-│   │   └── test_ablation.py         # ablation harness
+│   │   ├── test_ablation.py         # ablation harness
+│   │   └── test_llm_judge.py        # LLM-as-Judge
 │   ├── mcp/
 │   │   ├── test_tools.py            # MCP tool implementations
 │   │   ├── test_server.py           # FastMCP server (list/call tools)
@@ -273,6 +275,12 @@ Swapping the retrieval method through `build_retriever` and re-running the harne
 | hybrid+rerank | 0.901 | 1.000 | 0.873 |
 
 Takeaways on this set: **vector retrieval wins on Recall@10** — the queries include paraphrases that lexical search misses, which embeddings recover. **hybrid+rerank wins on MRR and nDCG@10** after the cross-encoder re-scores the hybrid candidate pool, showing that reranking is useful for promoting the strongest relevant hit even when the fused retriever already has good recall. The cross-encoder model downloads on first use and is then cached.
+
+### LLM-as-Judge
+
+`app/eval/llm_judge.py` evaluates *generated* text (e.g. the LLM report) against the structured evidence it should be grounded on. `judge_report(llm, output_text, evidence)` returns a `JudgeVerdict` scoring **groundedness / coverage / clarity** (1–5) and listing **unsupported claims** — the automated hallucination check for the report generator. It runs through the same `generate_model` path (schema-validated, corrective retry), so a judge failure yields an *unevaluated* verdict rather than raising.
+
+This catches real drift: on a live grounded report the judge scored coverage and clarity 5 but groundedness 3, flagging the coaching-style suggestions the report had added beyond the structured data — exactly the kind of "fluent but unsupported" addition the deterministic-core architecture is meant to keep in check.
 
 ## Development (Docker)
 
