@@ -47,8 +47,9 @@ career-agent-rag/
 │   │   ├── vector_matcher.py     # VectorMatcher (semantic match)
 │   │   ├── report_generator.py   # ReportGenerator (template-based report)
 │   │   └── retrieval/            # Retrieval backends (shared interface)
-│   │       ├── base.py           # Retriever protocol, tokenizer, corpus builder
-│   │       └── bm25_retriever.py # BM25Retriever (Okapi BM25, lexical recall)
+│   │       ├── base.py             # Retriever protocol, tokenizer, corpus builder
+│   │       ├── bm25_retriever.py   # BM25Retriever (Okapi BM25, lexical recall)
+│   │       └── vector_retriever.py # VectorRetriever (embedding, semantic recall)
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -67,7 +68,8 @@ career-agent-rag/
 │       ├── test_vector_matcher.py
 │       ├── test_report_generator.py
 │       └── retrieval/
-│           └── test_bm25_retriever.py
+│           ├── test_bm25_retriever.py
+│           └── test_vector_retriever.py
 ├── frontend/                # Reserved for future frontend
 ├── experiments/             # Standalone experiment scripts
 │   ├── day1_embedding_demo.py
@@ -115,10 +117,11 @@ The overall score is skill-first:
 The `app/services/retrieval/` package treats the resume (its experiences and projects) as a searchable corpus and ranks documents against a JD-derived query. All backends share one interface — `search(query, k) -> list[RetrievalResult]` — so they can be swapped or composed:
 
 - **BM25Retriever** — Okapi BM25 implemented from scratch (lexical/keyword recall). Scores documents by IDF-weighted, length-normalized term frequency with configurable `k1` / `b`. Matches exact tech terms (PyTorch, Docker, Kubernetes) that embeddings tend to blur.
+- **VectorRetriever** — embedding-based semantic recall. The corpus is embedded once at construction; each query is embedded and ranked by cosine similarity, with an optional `min_score` floor. Matches experiences phrased differently from the JD but close in meaning.
 
 `corpus_from_resume(resume)` builds the document list (one entry per experience and project), and a tech-aware tokenizer preserves tokens like `c++`, `c#`, and `node.js`.
 
-Vector, hybrid, and reranking backends layer onto the same interface next.
+Hybrid and reranking backends layer onto the same interface next.
 
 ## Development (Docker)
 

@@ -19,10 +19,12 @@ from app.services.retrieval.base import (
     corpus_from_resume,
 )
 from app.services.retrieval.bm25_retriever import BM25Retriever
+from app.services.retrieval.vector_retriever import VectorRetriever
 
 __all__ = [
     "Retriever",
     "RetrievalResult",
     "corpus_from_resume",
     "BM25Retriever",
+    "VectorRetriever",
 ]
