@@ -71,6 +71,8 @@ career-agent-rag/
 │   │   ├── tools.py             # MCP tool implementations (dict in/out)
 │   │   ├── server.py            # FastMCP server exposing the tools
 │   │   └── client.py            # MCPClient (connect + call tools over stdio)
+│   ├── skills/                # Packaged end-to-end capabilities
+│   │   └── career_match.py      # run_career_match() full pipeline + CLI
 │   ├── eval/                  # Evaluation harnesses
 │   │   ├── metrics.py           # recall@k, MRR, nDCG@k
 │   │   ├── datasets.py          # fixture loaders (corpus + labeled queries)
@@ -110,6 +112,8 @@ career-agent-rag/
 │   │   ├── test_tools.py            # MCP tool implementations
 │   │   ├── test_server.py           # FastMCP server (list/call tools)
 │   │   └── test_client.py           # MCPClient (unit + live server)
+│   ├── skills/
+│   │   └── test_career_match.py     # career-match pipeline
 │   └── services/
 │       ├── test_jd_parser.py
 │       ├── test_resume_parser.py
@@ -262,6 +266,16 @@ async with MCPClient() as client:
 ```
 
 It decodes JSON tool output to dicts/lists and raises `MCPToolError` when the server reports a failed call.
+
+## Skill
+
+`app/skills/career_match.py` packages the whole pipeline as one capability — `run_career_match(jd_text, resume_text, ...)` chains parse → match → rank → audit → report and returns a `CareerMatchResult`. It powers a Claude Code skill at `.claude/skills/career-match/SKILL.md` and a CLI:
+
+```bash
+python -m app.skills.career_match --jd JD.txt --resume RESUME.txt   # --no-llm for the deterministic path
+```
+
+Where MCP exposes the tools *individually* for an external host to orchestrate, the skill is the *in-process, end-to-end* version that chains them into a single report.
 
 ## Evaluation
 
