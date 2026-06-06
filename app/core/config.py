@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
+    # CORS (allowed origins for the browser frontend)
+    CORS_ORIGINS: list[str] = ["*"]
+
     # Embedding model
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
     EMBEDDING_DEVICE: str = "cpu"

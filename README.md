@@ -30,6 +30,7 @@ career-agent-rag/
 │   ├── main.py              # FastAPI entry point
 │   ├── api/
 │   │   ├── router.py        # Route aggregator
+│   │   ├── errors.py        # Consistent {status, error} exception handlers
 │   │   └── v1/              # API v1 endpoints
 │   │       ├── jd.py        # POST /api/v1/jd/parse
 │   │       ├── resume.py    # POST /api/v1/resume/parse
@@ -39,7 +40,8 @@ career-agent-rag/
 │   │   ├── jd.py
 │   │   ├── resume.py
 │   │   ├── match.py
-│   │   └── audit.py
+│   │   ├── audit.py
+│   │   └── common.py        # ErrorResponse / ErrorDetail
 │   ├── services/            # Business logic
 │   │   ├── embedding.py          # EmbeddingService
 │   │   ├── _embedding_helpers.py # Shared embedding utilities
@@ -84,6 +86,7 @@ career-agent-rag/
 │   ├── conftest.py          # TestClient fixture
 │   ├── test_health.py
 │   ├── api/
+│   │   ├── test_errors.py
 │   │   └── v1/
 │   │       ├── test_jd.py
 │   │       ├── test_resume.py
@@ -145,6 +148,7 @@ career-agent-rag/
 
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/` | Service index (name, version, docs link) |
 | GET | `/health` | Health check |
 | POST | `/api/v1/jd/parse` | Parse job description (LLM extraction, rule fallback) |
 | POST | `/api/v1/resume/parse` | Parse resume (LLM extraction, rule fallback) |
@@ -153,6 +157,8 @@ career-agent-rag/
 | POST | `/api/v1/audit` | Audit a resume for authenticity / quality risks |
 
 Swagger docs: `http://localhost:8000/docs`
+
+Successful responses use a `{"status": "success", "data": ...}` envelope; errors use the mirror shape `{"status": "error", "error": {type, message, detail}}`, applied consistently to validation (422), HTTP, and unhandled (500) errors via `app/api/errors.py` (500s don't leak internals). CORS is enabled for the browser frontend (`CORS_ORIGINS`).
 
 ## Current Matching Signals
 
