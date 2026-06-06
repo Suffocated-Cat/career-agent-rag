@@ -96,12 +96,14 @@ def generate_model(
     model_cls: type[T],
     fallback: T,
     system: str | None = None,
+    retries: int = 1,
 ) -> T:
     """Return an LLM-produced, schema-validated model, or *fallback*.
 
     The LLM is asked for JSON, which is parsed and validated against
-    *model_cls*. Any failure — unconfigured client, call error, unparseable
-    JSON, or validation error — yields the deterministic fallback.
+    *model_cls*. Transient failures (call error, unparseable JSON, validation
+    error) are retried up to *retries* times — LLMs often fix malformed JSON on
+    a second pass — before yielding the deterministic fallback.
 
     Args:
         llm: The LLM client.
@@ -109,16 +111,21 @@ def generate_model(
         model_cls: The Pydantic model to validate into.
         fallback: Deterministic instance returned on any failure.
         system: Optional system prompt.
+        retries: Number of extra attempts after the first (default 1, so up to
+            two attempts total). Use 0 to disable retrying.
 
     Returns:
         A validated *model_cls* instance, or *fallback*.
     """
     if not llm.is_configured():
         return fallback
-    try:
-        raw = llm.complete(prompt, system=system)
-        data = extract_json(raw)
-        return model_cls.model_validate(data)
-    except Exception:
-        # Any failure (call error, bad JSON, schema mismatch) → deterministic.
-        return fallback
+
+    for _ in range(retries + 1):
+        try:
+            raw = llm.complete(prompt, system=system)
+            data = extract_json(raw)
+            return model_cls.model_validate(data)
+        except Exception:
+            # Transient: bad JSON / schema / call error — try again, then fall back.
+            continue
+    return fallback

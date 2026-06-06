@@ -6,17 +6,22 @@ from app.services.llm_support import extract_json, generate_model, generate_text
 
 
 class FakeLLM:
-    def __init__(self, reply="", configured=True, raises=False):
+    def __init__(self, reply="", configured=True, raises=False, fail_first=0):
         self.reply = reply
         self.configured = configured
         self.raises = raises
+        self.fail_first = fail_first  # first N calls raise, then succeed
+        self.calls = 0
 
     def is_configured(self):
         return self.configured
 
     def complete(self, prompt, system=None, **kwargs):
+        self.calls += 1
         if self.raises:
             raise RuntimeError("api down")
+        if self.calls <= self.fail_first:
+            raise RuntimeError("transient failure")
         return self.reply
 
 
@@ -95,3 +100,24 @@ class TestGenerateModel:
         # Missing required 'age' → validation error → fallback.
         out = generate_model(FakeLLM(reply='{"name": "Ann"}'), "q", Person, fb)
         assert out is fb
+
+    def test_retries_once_then_succeeds(self):
+        # First call raises, second returns valid JSON → retry recovers it.
+        llm = FakeLLM(reply='{"name": "Ann", "age": 30}', fail_first=1)
+        out = generate_model(llm, "q", Person, Person(name="fb", age=1))
+        assert out == Person(name="Ann", age=30)
+        assert llm.calls == 2
+
+    def test_gives_up_after_retries(self):
+        fb = Person(name="fb", age=1)
+        llm = FakeLLM(reply='{"name": "Ann", "age": 30}', fail_first=5)
+        out = generate_model(llm, "q", Person, fb)  # retries=1 → 2 attempts
+        assert out is fb
+        assert llm.calls == 2
+
+    def test_retries_disabled(self):
+        fb = Person(name="fb", age=1)
+        llm = FakeLLM(reply='{"name": "Ann", "age": 30}', fail_first=1)
+        out = generate_model(llm, "q", Person, fb, retries=0)
+        assert out is fb
+        assert llm.calls == 1

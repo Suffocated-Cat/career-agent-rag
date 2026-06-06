@@ -130,8 +130,36 @@ def test_match_response_includes_project_audit(client):
     assert 0.0 <= audit["risk_score"] <= 1.0
 
 
-def test_generate_report_returns_200(client):
+def test_get_llm_builds_client():
+    """_get_llm constructs a real LLMClient (offline; no network on build)."""
+    from app.api.v1.match import _get_llm
+    from app.services.llm_client import LLMClient
+
+    _get_llm.cache_clear()
+    assert isinstance(_get_llm(), LLMClient)
+    _get_llm.cache_clear()
+
+
+class _FakeReportLLM:
+    """Fake LLMClient for the report endpoint (no network)."""
+
+    def __init__(self, reply="", configured=True):
+        self.reply = reply
+        self.configured = configured
+
+    def is_configured(self):
+        return self.configured
+
+    def complete(self, prompt, system=None, **kwargs):
+        return self.reply
+
+
+def test_generate_report_returns_200(client, monkeypatch):
     """POST /api/v1/match/report should return 200 with valid report schema."""
+    # Unconfigured LLM → deterministic template report (offline, stable).
+    monkeypatch.setattr(
+        "app.api.v1.match._get_llm", lambda: _FakeReportLLM(configured=False)
+    )
     response = client.post(
         "/api/v1/match/report",
         json={
@@ -179,3 +207,24 @@ def test_generate_report_returns_200(client):
     assert "project_audit" in report
     assert report["project_audit"] is not None
     assert "Project Risk Audit" in report["full_report"]
+
+
+def test_report_uses_llm_when_configured(client, monkeypatch):
+    """When the LLM is configured, the endpoint returns the LLM-generated report."""
+    monkeypatch.setattr(
+        "app.api.v1.match._get_llm",
+        lambda: _FakeReportLLM(reply="# AI Report\nGrounded narrative."),
+    )
+    response = client.post(
+        "/api/v1/match/report",
+        json={
+            "jd": {"raw_text": "ML role", "title": "ML Engineer", "skills": ["python"]},
+            "resume": {"raw_text": "...", "skills": ["python"]},
+        },
+    )
+
+    assert response.status_code == 200
+    report = response.json()["data"]
+    # Narrative comes from the LLM; structured fields stay deterministic.
+    assert report["full_report"] == "# AI Report\nGrounded narrative."
+    assert report["job_title"] == "ML Engineer"

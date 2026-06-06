@@ -13,6 +13,7 @@ from app.models.match import (
 from app.models.resume import Resume
 from app.services.embedding import EmbeddingService
 from app.services.keyword_matcher import match as match_jd_resume
+from app.services.llm_client import LLMClient
 from app.services.match_pipeline import rank_resume_projects
 from app.services.project_auditor import audit_resume
 from app.services.report_generator import generate_report
@@ -27,6 +28,12 @@ def _get_embedding_service() -> EmbeddingService | None:
         return EmbeddingService()
     except Exception:
         return None
+
+
+@lru_cache(maxsize=1)
+def _get_llm() -> LLMClient:
+    """Create the LLM client once. Unconfigured → report falls back to template."""
+    return LLMClient()
 
 
 def _run_match(jd: JobDescription, resume: Resume) -> MatchResult:
@@ -66,5 +73,5 @@ async def generate_match_report(request: ReportRequest):
     recommendations.
     """
     result = _run_match(request.jd, request.resume)
-    report = generate_report(request.jd, request.resume, result)
+    report = generate_report(request.jd, request.resume, result, llm=_get_llm())
     return ReportResponse(data=report)
