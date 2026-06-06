@@ -72,7 +72,8 @@ career-agent-rag/
 │   │   ├── metrics.py           # recall@k, MRR, nDCG@k
 │   │   ├── datasets.py          # fixture loaders (corpus + labeled queries)
 │   │   ├── runner.py            # evaluate_retriever() → EvalReport
-│   │   └── selector_eval.py     # evaluate_selector() → SelectorReport
+│   │   ├── selector_eval.py     # evaluate_selector() → SelectorReport
+│   │   └── ablation.py          # run_ablation() across retrieval methods
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -95,7 +96,8 @@ career-agent-rag/
 │   │   ├── test_metrics.py          # recall@k, MRR, nDCG@k
 │   │   ├── test_datasets.py         # fixture loaders
 │   │   ├── test_runner.py           # evaluate_retriever over fixtures
-│   │   └── test_selector_eval.py    # evaluate_selector over fixtures
+│   │   ├── test_selector_eval.py    # evaluate_selector over fixtures
+│   │   └── test_ablation.py         # ablation harness
 │   ├── mcp/
 │   │   ├── test_tools.py            # MCP tool implementations
 │   │   ├── test_server.py           # FastMCP server (list/call tools)
@@ -257,7 +259,20 @@ It decodes JSON tool output to dicts/lists and raises `MCPToolError` when the se
 - **datasets.py** — loads the fixtures in `tests/fixtures/`: a pooled corpus of resume documents (`retrieval_documents.json`) and queries with graded relevance labels (`relevance_queries.json`). Pooling several resumes into one index gives realistic distractors, which is what makes the metrics meaningful.
 - **runner.py** — `evaluate_retriever(retriever, documents, queries, k)` runs each query, maps results back to stable ids, and returns mean recall@k / MRR / nDCG@k in an `EvalReport`.
 
-Swapping the retrieval method through `build_retriever` and re-running the harness is the basis for the Week-4 ablations.
+Swapping the retrieval method through `build_retriever` and re-running the harness is the basis for the ablation below.
+
+### Ablation
+
+`app/eval/ablation.py` runs every retrieval method over the same labeled fixture (`run_ablation` + `format_ablation_table`, or `python -m app.eval.ablation`). Results on the bundled dataset (k=10):
+
+| Method | Recall@10 | MRR | nDCG@10 |
+|--------|-----------|-----|----------|
+| bm25 | 0.800 | 0.917 | 0.771 |
+| vector | 0.922 | 0.903 | 0.864 |
+| hybrid | 0.901 | 0.917 | 0.842 |
+| hybrid+rerank | 0.901 | 1.000 | 0.873 |
+
+Takeaways on this set: **vector retrieval wins on Recall@10** — the queries include paraphrases that lexical search misses, which embeddings recover. **hybrid+rerank wins on MRR and nDCG@10** after the cross-encoder re-scores the hybrid candidate pool, showing that reranking is useful for promoting the strongest relevant hit even when the fused retriever already has good recall. The cross-encoder model downloads on first use and is then cached.
 
 ## Development (Docker)
 
