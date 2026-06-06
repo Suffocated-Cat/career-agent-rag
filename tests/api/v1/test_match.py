@@ -58,6 +58,49 @@ def test_match_response_includes_semantic_fields(client):
     assert "experience_match_rate" in result
 
 
+def test_match_response_includes_project_relevance(client):
+    """POST /api/v1/match should rank resume items by relevance to the JD."""
+    response = client.post(
+        "/api/v1/match",
+        json={
+            "jd": {
+                "raw_text": "Looking for ML engineer with PyTorch.",
+                "skills": ["pytorch", "recommendation", "ranking"],
+                "responsibilities": ["Build recommendation models"],
+            },
+            "resume": {
+                "raw_text": "ML and frontend experience.",
+                "skills": ["pytorch", "react"],
+                "experience": [
+                    {
+                        "title": "ML Engineer",
+                        "company": "Acme",
+                        "highlights": ["Built recommendation ranking models in pytorch"],
+                    },
+                    {
+                        "title": "Frontend Dev",
+                        "company": "WebCo",
+                        "highlights": ["Built a react dashboard"],
+                    },
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()["data"]
+
+    assert "project_relevance" in result
+    relevance = result["project_relevance"]
+    assert isinstance(relevance, list)
+    assert len(relevance) >= 1
+
+    top = relevance[0]
+    assert {"doc_id", "source_type", "label", "score", "normalized_score"} <= top.keys()
+    assert top["label"] == "ML Engineer at Acme"  # most relevant to the JD
+    assert top["normalized_score"] == 1.0
+
+
 def test_generate_report_returns_200(client):
     """POST /api/v1/match/report should return 200 with valid report schema."""
     response = client.post(

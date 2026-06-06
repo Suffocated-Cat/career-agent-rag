@@ -2,9 +2,18 @@ from functools import lru_cache
 
 from fastapi import APIRouter
 
-from app.models.match import MatchRequest, MatchResponse, ReportRequest, ReportResponse
+from app.models.jd import JobDescription
+from app.models.match import (
+    MatchRequest,
+    MatchResponse,
+    MatchResult,
+    ReportRequest,
+    ReportResponse,
+)
+from app.models.resume import Resume
 from app.services.embedding import EmbeddingService
 from app.services.keyword_matcher import match as match_jd_resume
+from app.services.match_pipeline import rank_resume_projects
 from app.services.report_generator import generate_report
 
 router = APIRouter()
@@ -19,18 +28,31 @@ def _get_embedding_service() -> EmbeddingService | None:
         return None
 
 
+def _run_match(jd: JobDescription, resume: Resume) -> MatchResult:
+    """Run the full match: skill/semantic scoring plus project relevance.
+
+    Uses hybrid retrieval for project relevance when an embedding service is
+    available, falling back to lexical BM25 when it is not (the vector arm
+    needs embeddings).
+    """
+    embedding_service = _get_embedding_service()
+    result = match_jd_resume(jd, resume, embedding_service=embedding_service)
+
+    method = "hybrid" if embedding_service is not None else "bm25"
+    result.project_relevance = rank_resume_projects(
+        jd, resume, embedding_service=embedding_service, method=method
+    )
+    return result
+
+
 @router.post("/match", response_model=MatchResponse)
 async def match_jd_resume_endpoint(request: MatchRequest):
     """Match a parsed job description against a parsed resume.
 
-    Computes skill overlap, semantic similarity, and an overall match score.
+    Computes skill overlap, semantic similarity, an overall match score, and
+    per-experience/project relevance ranking.
     """
-    result = match_jd_resume(
-        request.jd,
-        request.resume,
-        embedding_service=_get_embedding_service(),
-    )
-    return MatchResponse(data=result)
+    return MatchResponse(data=_run_match(request.jd, request.resume))
 
 
 @router.post("/match/report", response_model=ReportResponse)
@@ -41,10 +63,6 @@ async def generate_match_report(request: ReportRequest):
     with skill analysis, experience alignment, gap analysis, and
     recommendations.
     """
-    result = match_jd_resume(
-        request.jd,
-        request.resume,
-        embedding_service=_get_embedding_service(),
-    )
+    result = _run_match(request.jd, request.resume)
     report = generate_report(request.jd, request.resume, result)
     return ReportResponse(data=report)
