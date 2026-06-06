@@ -21,6 +21,7 @@ from app.services.retrieval.base import (
 from app.services.retrieval.bm25_retriever import BM25Retriever
 from app.services.retrieval.vector_retriever import VectorRetriever
 from app.services.retrieval.hybrid_retriever import HybridRetriever
+from app.services.retrieval.reranker import Reranker, RerankingRetriever
 
 __all__ = [
     "Retriever",
@@ -29,4 +30,6 @@ __all__ = [
     "BM25Retriever",
     "VectorRetriever",
     "HybridRetriever",
+    "Reranker",
+    "RerankingRetriever",
 ]

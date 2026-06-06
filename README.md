@@ -50,7 +50,8 @@ career-agent-rag/
 │   │       ├── base.py             # Retriever protocol, tokenizer, corpus builder
 │   │       ├── bm25_retriever.py   # BM25Retriever (Okapi BM25, lexical recall)
 │   │       ├── vector_retriever.py # VectorRetriever (embedding, semantic recall)
-│   │       └── hybrid_retriever.py # HybridRetriever (RRF / weighted fusion)
+│   │       ├── hybrid_retriever.py # HybridRetriever (RRF / weighted fusion)
+│   │       └── reranker.py         # Reranker + RerankingRetriever (cross-encoder)
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -71,7 +72,8 @@ career-agent-rag/
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
 │           ├── test_vector_retriever.py
-│           └── test_hybrid_retriever.py
+│           ├── test_hybrid_retriever.py
+│           └── test_reranker.py
 ├── frontend/                # Reserved for future frontend
 ├── experiments/             # Standalone experiment scripts
 │   ├── day1_embedding_demo.py
@@ -121,10 +123,9 @@ The `app/services/retrieval/` package treats the resume (its experiences and pro
 - **BM25Retriever** — Okapi BM25 implemented from scratch (lexical/keyword recall). Scores documents by IDF-weighted, length-normalized term frequency with configurable `k1` / `b`. Matches exact tech terms (PyTorch, Docker, Kubernetes) that embeddings tend to blur.
 - **VectorRetriever** — embedding-based semantic recall. The corpus is embedded once at construction; each query is embedded and ranked by cosine similarity, with an optional `min_score` floor. Matches experiences phrased differently from the JD but close in meaning.
 - **HybridRetriever** — fuses BM25 and vector recall over one corpus, exposing each arm as `.bm25` / `.vector` for inspection or ablation. Default fusion is **Reciprocal Rank Fusion** (rank-based, so the two score scales never need normalizing); a **weighted** min-max sum is available via `method="weighted"`. Per-arm weights are configurable.
+- **Reranker / RerankingRetriever** — a cross-encoder re-scoring stage. The bi-encoder retrievers above score query and document independently (cheap, coarse); the cross-encoder feeds the (query, document) pair through the model together (accurate, expensive), so it re-ranks only a small candidate pool: *recall top ~20 → cross-encoder rescore → top-k*. `RerankingRetriever` wraps any base retriever behind the same `search(query, k)` interface. The model loads lazily on first use and can be injected for testing.
 
 `corpus_from_resume(resume)` builds the document list (one entry per experience and project), and a tech-aware tokenizer preserves tokens like `c++`, `c#`, and `node.js`.
-
-A reranking backend layers onto the same interface next.
 
 ## Development (Docker)
 

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
     EMBEDDING_DEVICE: str = "cpu"
 
+    # Reranker (cross-encoder) model
+    RERANKER_MODEL_NAME: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    RERANKER_DEVICE: str = "cpu"
+
     # HuggingFace
     HF_ENDPOINT: str | None = None
 
