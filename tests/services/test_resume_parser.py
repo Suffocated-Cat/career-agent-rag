@@ -123,3 +123,53 @@ class TestResumeParserEdgeCases:
         resume = parse_resume("")
         assert resume.raw_text == ""
         assert resume.skills == []
+
+
+class _FakeLLM:
+    def __init__(self, reply="", configured=True, raises=False):
+        self.reply = reply
+        self.configured = configured
+        self.raises = raises
+
+    def is_configured(self):
+        return self.configured
+
+    def complete(self, prompt, system=None, **kwargs):
+        if self.raises:
+            raise RuntimeError("api down")
+        return self.reply
+
+
+class TestParseResumeWithLLM:
+    SAMPLE = "Skills: Python\n\nExperience:\nML Engineer at Acme"
+
+    def test_llm_extraction_used(self):
+        reply = (
+            '{"skills": ["Python", "PyTorch"], '
+            '"experience": [{"title": "ML Engineer", "company": "Acme", '
+            '"duration": "2021-2023", "highlights": ["Built models"]}], '
+            '"education": [{"degree": "BSc", "institution": "MIT", "year": "2020"}], '
+            '"projects": [{"name": "RAG", "description": "qa bot", "technologies": ["faiss"]}]}'
+        )
+        resume = parse_resume(self.SAMPLE, llm=_FakeLLM(reply=reply))
+        assert resume.skills == ["python", "pytorch"]  # lowercased
+        assert resume.experience[0].title == "ML Engineer"
+        assert resume.education[0].institution == "MIT"
+        assert resume.projects[0].name == "RAG"
+        assert resume.raw_text == self.SAMPLE
+
+    def test_falls_back_when_unconfigured(self):
+        resume = parse_resume(self.SAMPLE, llm=_FakeLLM(configured=False))
+        assert "python" in resume.skills
+
+    def test_falls_back_on_llm_error(self):
+        resume = parse_resume(self.SAMPLE, llm=_FakeLLM(raises=True))
+        assert "python" in resume.skills
+
+    def test_falls_back_on_garbage_reply(self):
+        resume = parse_resume(self.SAMPLE, llm=_FakeLLM(reply="nope"))
+        assert "python" in resume.skills
+
+    def test_no_llm_uses_rules(self):
+        resume = parse_resume(self.SAMPLE)
+        assert "python" in resume.skills

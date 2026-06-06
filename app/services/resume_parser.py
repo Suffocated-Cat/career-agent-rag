@@ -20,6 +20,8 @@ Replaced by LLM-based parsing in Week 3.
 import re
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, Field
+
 from app.models.resume import (
     Resume,
     ResumeProject,
@@ -27,9 +29,34 @@ from app.models.resume import (
     ResumeExperience,
 )
 from app.services.jd_parser import TECH_SKILLS, SKILL_ALIASES, _match_skills
+from app.services.llm_support import generate_model
 
 if TYPE_CHECKING:
     from app.services.embedding import EmbeddingService
+    from app.services.llm_client import LLMClient
+
+
+class _ResumeExtraction(BaseModel):
+    """Fields the LLM extracts from a resume (raw_text is supplied separately)."""
+
+    skills: list[str] = Field(default_factory=list)
+    experience: list[ResumeExperience] = Field(default_factory=list)
+    education: list[ResumeEducation] = Field(default_factory=list)
+    projects: list[ResumeProject] = Field(default_factory=list)
+
+
+_RESUME_EXTRACT_SYSTEM = (
+    "You extract structured fields from a resume. Return strict JSON with keys: "
+    "skills (array of short strings), experience (array of objects with title, "
+    "company, duration, highlights[]), education (array of objects with degree, "
+    "institution, year), projects (array of objects with name, description, "
+    "technologies[]). Do not invent information not present in the text."
+)
+
+
+def _resume_extract_prompt(raw_text: str) -> str:
+    """Prompt asking the LLM to extract resume fields as JSON."""
+    return f"Extract the resume fields as JSON.\n\nResume:\n{raw_text}"
 
 # ── Resume section header patterns ─────────────────────────────────────
 
@@ -384,6 +411,7 @@ def _split_entries(text: str) -> list[str]:
 def parse_resume(
     raw_text: str,
     embedding_service: "EmbeddingService | None" = None,
+    llm: "LLMClient | None" = None,
 ) -> Resume:
     """Parse a raw resume text into a structured Resume.
 
@@ -395,6 +423,9 @@ def parse_resume(
               if regex patterns find no sections.
             - Skill extraction adds semantic discovery for sentences
               that don't match any vocabulary keywords.
+        llm: Optional LLM client. When provided and configured, fields are
+            extracted by the LLM (validated against the schema, with the
+            rule-based parse as the fallback) — useful for messy resumes.
 
     Returns:
         A Resume with extracted fields populated.
@@ -442,10 +473,36 @@ def parse_resume(
     education = _parse_education_entries(education_text)
     projects = _parse_project_entries(projects_text)
 
-    return Resume(
+    rule_result = Resume(
         raw_text=raw_text,
         skills=skills,
         projects=projects,
         education=education,
         experience=experience,
+    )
+
+    if llm is None:
+        return rule_result
+
+    # LLM extraction, falling back to the rule-based result on any failure.
+    fallback = _ResumeExtraction(
+        skills=rule_result.skills,
+        experience=rule_result.experience,
+        education=rule_result.education,
+        projects=rule_result.projects,
+    )
+    extraction = generate_model(
+        llm,
+        _resume_extract_prompt(raw_text),
+        _ResumeExtraction,
+        fallback,
+        system=_RESUME_EXTRACT_SYSTEM,
+    )
+    return Resume(
+        raw_text=raw_text,
+        # Normalize skills to lowercase to match the rule parser's convention.
+        skills=[s.lower() for s in extraction.skills],
+        projects=extraction.projects,
+        education=extraction.education,
+        experience=extraction.experience,
     )

@@ -21,10 +21,38 @@ Replaced by LLM-based parsing in Week 3.
 import re
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, Field
+
 from app.models.jd import JobDescription
+from app.services.llm_support import generate_model
 
 if TYPE_CHECKING:
     from app.services.embedding import EmbeddingService
+    from app.services.llm_client import LLMClient
+
+
+class _JDExtraction(BaseModel):
+    """Fields the LLM extracts from a JD (raw_text is supplied separately)."""
+
+    title: str | None = None
+    company: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    responsibilities: list[str] = Field(default_factory=list)
+    nice_to_haves: list[str] = Field(default_factory=list)
+
+
+_JD_EXTRACT_SYSTEM = (
+    "You extract structured fields from a job description. Return strict JSON "
+    "with keys: title, company, skills, responsibilities, nice_to_haves. "
+    "skills/responsibilities/nice_to_haves are arrays of short strings; use "
+    "null for an unknown title or company. Do not invent information not "
+    "present in the text."
+)
+
+
+def _jd_extract_prompt(raw_text: str) -> str:
+    """Prompt asking the LLM to extract JD fields as JSON."""
+    return f"Extract the job description fields as JSON.\n\nJob description:\n{raw_text}"
 
 # ── Tech skills vocabulary ──────────────────────────────────────────────
 # Covers: languages, frameworks, platforms, tools, concepts
@@ -319,6 +347,7 @@ def _extract_skills_from_sections(
 def parse_jd(
     raw_text: str,
     embedding_service: "EmbeddingService | None" = None,
+    llm: "LLMClient | None" = None,
 ) -> JobDescription:
     """Parse a raw job description text into a structured JobDescription.
 
@@ -330,6 +359,9 @@ def parse_jd(
               if regex patterns find no sections.
             - Skill extraction adds semantic discovery for sentences
               that don't match any vocabulary keywords.
+        llm: Optional LLM client. When provided and configured, fields are
+            extracted by the LLM (validated against the schema, with the
+            rule-based parse as the fallback).
 
     Returns:
         A JobDescription with extracted fields populated.
@@ -375,11 +407,39 @@ def parse_jd(
     responsibilities = _extract_bullet_items(responsibilities_text)
     nice_to_haves = _extract_bullet_items(nice_to_have_text)
 
-    return JobDescription(
+    rule_result = JobDescription(
         raw_text=raw_text,
         title=title,
         company=company,
         skills=skills,
         responsibilities=responsibilities,
         nice_to_haves=nice_to_haves,
+    )
+
+    if llm is None:
+        return rule_result
+
+    # LLM extraction, falling back to the rule-based result on any failure.
+    fallback = _JDExtraction(
+        title=rule_result.title,
+        company=rule_result.company,
+        skills=rule_result.skills,
+        responsibilities=rule_result.responsibilities,
+        nice_to_haves=rule_result.nice_to_haves,
+    )
+    extraction = generate_model(
+        llm,
+        _jd_extract_prompt(raw_text),
+        _JDExtraction,
+        fallback,
+        system=_JD_EXTRACT_SYSTEM,
+    )
+    return JobDescription(
+        raw_text=raw_text,
+        title=extraction.title,
+        company=extraction.company,
+        # Normalize skills to lowercase to match the rule parser's convention.
+        skills=[s.lower() for s in extraction.skills],
+        responsibilities=extraction.responsibilities,
+        nice_to_haves=extraction.nice_to_haves,
     )

@@ -173,3 +173,52 @@ class TestSkillWordBoundary:
         jd = parse_jd("Embedded Dev\n\nRequirements:\n- C\n- C++")
         assert "c" in jd.skills
         assert "c++" in jd.skills
+
+
+class _FakeLLM:
+    def __init__(self, reply="", configured=True, raises=False):
+        self.reply = reply
+        self.configured = configured
+        self.raises = raises
+
+    def is_configured(self):
+        return self.configured
+
+    def complete(self, prompt, system=None, **kwargs):
+        if self.raises:
+            raise RuntimeError("api down")
+        return self.reply
+
+
+class TestParseJdWithLLM:
+    SAMPLE = "ML Engineer at Acme\n\nRequirements:\n- Python\n- Docker"
+
+    def test_llm_extraction_used(self):
+        reply = (
+            '{"title": "Staff ML Engineer", "company": "Acme", '
+            '"skills": ["Python", "PyTorch"], '
+            '"responsibilities": ["Build models"], "nice_to_haves": ["AWS"]}'
+        )
+        jd = parse_jd(self.SAMPLE, llm=_FakeLLM(reply=reply))
+        assert jd.title == "Staff ML Engineer"
+        assert jd.company == "Acme"
+        # Skills normalized to lowercase to match the rule parser convention.
+        assert jd.skills == ["python", "pytorch"]
+        assert jd.responsibilities == ["Build models"]
+        assert jd.raw_text == self.SAMPLE  # raw_text preserved, not from LLM
+
+    def test_falls_back_to_rules_when_unconfigured(self):
+        jd = parse_jd(self.SAMPLE, llm=_FakeLLM(configured=False))
+        assert "python" in jd.skills  # rule-based result
+
+    def test_falls_back_to_rules_on_llm_error(self):
+        jd = parse_jd(self.SAMPLE, llm=_FakeLLM(raises=True))
+        assert "python" in jd.skills
+
+    def test_falls_back_on_garbage_reply(self):
+        jd = parse_jd(self.SAMPLE, llm=_FakeLLM(reply="not json at all"))
+        assert "python" in jd.skills
+
+    def test_no_llm_uses_rules(self):
+        jd = parse_jd(self.SAMPLE)
+        assert "python" in jd.skills

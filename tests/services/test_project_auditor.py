@@ -10,6 +10,23 @@ from app.services.project_auditor import (
 )
 
 
+class _AuditFakeLLM:
+    def __init__(self, reply="", configured=True, raises=False):
+        self.reply = reply
+        self.configured = configured
+        self.raises = raises
+        self.called = False
+
+    def is_configured(self):
+        return self.configured
+
+    def complete(self, prompt, system=None, **kwargs):
+        self.called = True
+        if self.raises:
+            raise RuntimeError("api down")
+        return self.reply
+
+
 def _vague_claims_resume() -> Resume:
     """A resume modeled on the 'vague_claims' fixture profile."""
     return Resume(
@@ -174,6 +191,29 @@ class TestAuditResume:
         assert report.findings == []
         assert report.risk_score == 0.0
         assert report.summary == "No authenticity risks detected."
+
+    def test_no_advice_without_llm(self):
+        report = audit_resume(_vague_claims_resume())
+        assert report.advice == ""
+
+    def test_advice_generated_with_llm(self):
+        report = audit_resume(_vague_claims_resume(), llm=_AuditFakeLLM("Fix it like this."))
+        assert report.advice == "Fix it like this."
+        # Numbers stay deterministic.
+        assert report.findings
+        assert report.risk_score > 0.0
+
+    def test_no_advice_when_no_findings(self):
+        # Clean resume → no findings → LLM not invoked, advice empty.
+        llm = _AuditFakeLLM("should not be called")
+        report = audit_resume(Resume(raw_text="nothing"), llm=llm)
+        assert report.advice == ""
+        assert llm.called is False
+
+    def test_advice_falls_back_on_llm_error(self):
+        report = audit_resume(_vague_claims_resume(), llm=_AuditFakeLLM(raises=True))
+        assert report.advice == ""  # fallback empty, findings intact
+        assert report.findings
 
     def test_thin_description_with_advanced_tech_flagged(self):
         resume = Resume(

@@ -17,11 +17,36 @@ The output feeds the project-risk section of the match report and gives the
 LLM (Week 3) a structured starting point instead of auditing from scratch.
 """
 
+import json
 import re
+
+from typing import TYPE_CHECKING
 
 from app.models.audit import ProjectAuditReport, RiskFinding
 from app.models.resume import Resume
+from app.services.llm_support import generate_text
 from app.services.retrieval.base import tokenize
+
+if TYPE_CHECKING:
+    from app.services.llm_client import LLMClient
+
+_ADVICE_SYSTEM = (
+    "You are a resume coach. Given a list of detected risks in a resume, "
+    "explain for each why it weakens credibility and give concrete, honest "
+    "steps to fix it — what evidence to add or how to rewrite the claim. "
+    "Use only the provided findings; do not invent new issues. Respond in "
+    "Markdown."
+)
+
+
+def _advice_prompt(findings: list[RiskFinding]) -> str:
+    """Build the grounding prompt from the deterministic findings."""
+    data = [f.model_dump() for f in findings]
+    return (
+        "Give concrete advice for addressing these resume risk findings, "
+        "grounded strictly on them:\n\n"
+        f"{json.dumps(data, indent=2, ensure_ascii=False)}"
+    )
 
 # Impressive, high-claim capabilities that demand supporting evidence.
 ADVANCED_CLAIMS: set[str] = {
@@ -192,15 +217,24 @@ def _audit_projects(resume: Resume) -> list[RiskFinding]:
     return findings
 
 
-def audit_resume(resume: Resume) -> ProjectAuditReport:
+def audit_resume(
+    resume: Resume,
+    llm: "LLMClient | None" = None,
+) -> ProjectAuditReport:
     """Audit a resume for unsupported or vague claims.
+
+    Findings and the risk score are always computed deterministically. When an
+    *llm* is provided and configured, natural-language advice on how to address
+    the findings is generated (grounded strictly on them); the numbers are
+    never affected.
 
     Args:
         resume: The parsed resume to audit.
+        llm: Optional LLM client for "how to fix" advice.
 
     Returns:
-        A ProjectAuditReport with findings, an aggregate risk score, and a
-        one-line summary.
+        A ProjectAuditReport with findings, an aggregate risk score, a one-line
+        summary, and optional advice.
     """
     evidence = _Evidence(resume)
 
@@ -210,7 +244,15 @@ def audit_resume(resume: Resume) -> ProjectAuditReport:
     findings += _audit_projects(resume)
 
     risk_score = _risk_score(resume, findings)
+
+    advice = ""
+    if llm is not None and findings:
+        advice = generate_text(
+            llm, _advice_prompt(findings), system=_ADVICE_SYSTEM, fallback=""
+        )
+
     return ProjectAuditReport(
+        advice=advice,
         findings=findings,
         risk_score=risk_score,
         summary=_summary(findings, risk_score),

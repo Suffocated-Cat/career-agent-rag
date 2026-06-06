@@ -19,6 +19,7 @@ class ProjectAuditReport(BaseModel):
     findings: list[RiskFinding] = Field(default_factory=list)
     risk_score: float = Field(default=0.0, ge=0.0, le=1.0)  # higher = riskier
     summary: str = ""
+    advice: str = ""  # optional LLM guidance on how to address the findings
 
 
 class AuditRequest(BaseModel):

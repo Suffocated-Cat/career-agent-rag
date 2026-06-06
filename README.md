@@ -220,6 +220,12 @@ The architecture keeps a **deterministic core** (rules, retrieval, vector/BM25 s
 
 `POST /api/v1/match/report` uses the LLM-generated narrative when `LLM_API_KEY` / `LLM_MODEL` are configured, and transparently falls back to the template report otherwise.
 
+The same pattern is applied across tools, deterministic-core-first:
+
+- **`parse_jd` / `parse_resume`** accept an optional `llm=`: when configured, fields are **extracted by the LLM** (validated into `JobDescription` / `Resume` via `generate_model`, with the rule-based parse as the fallback) — better on messy inputs. Skills are normalized to lowercase to match the rule convention.
+- **`audit_resume`** accepts an optional `llm=`: rule findings and the risk score stay deterministic; the LLM only adds **how-to-fix `advice`** grounded on those findings. Exposed on the standalone `POST /api/v1/audit` path (kept out of the hot `/match` path to keep matching fast).
+- `resume_matcher` and `project_ranker` stay **pure scoring** — their explanations live in the LLM report, not per-tool, so the score/ranking the eval harness depends on never goes through the model.
+
 ## MCP Server
 
 `app/mcp/` exposes CareerAgent's capabilities as **MCP** tools via a FastMCP server, so any MCP host (e.g. Claude Desktop) or MCP client can discover and call them: `parse_jd`, `parse_resume`, `match_resume`, `audit_resume`, `rank_projects`.
