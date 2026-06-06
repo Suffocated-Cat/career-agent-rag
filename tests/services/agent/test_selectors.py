@@ -79,7 +79,10 @@ class TestLLMToolSelector:
         prompt, system = llm.prompts[0]
         assert "jd_parser" in prompt
         assert "parse the posting" in prompt
+        assert "Routing rules:" in prompt
+        assert "Use null" in prompt
         assert system is not None
+        assert "Return only strict JSON" in system
 
     def test_falls_back_when_not_configured(self):
         # Unconfigured LLM → keyword fallback handles it.

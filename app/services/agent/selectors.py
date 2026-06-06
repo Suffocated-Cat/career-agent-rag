@@ -19,20 +19,35 @@ from app.services.agent.controller import (
 from app.services.llm_client import LLMClient
 
 _SYSTEM_PROMPT = (
-    "You are a tool router for a career-analysis agent. Given a user task and "
-    "a list of available tools, choose the single best tool for the task. "
-    'Respond with strict JSON: {"tool": "<tool_name>", "reason": "<short reason>"}. '
-    "Use exactly one of the provided tool names, or null if none fit."
+    "You are a deterministic tool router for a career-analysis agent. "
+    "Choose exactly one available tool for the user's task, or choose null "
+    "when the task is outside the listed tool capabilities. Do not answer the "
+    "task itself. Return only strict JSON with this schema: "
+    '{"tool": "<tool_name_or_null>", "reason": "<short reason>"}.'
 )
 
 
 def _build_prompt(task: str, tools: list[Tool]) -> str:
     """Render the task and tool catalog into a user prompt."""
-    lines = ["Available tools:"]
+    lines = [
+        "Available tools:",
+    ]
     for tool in tools:
         lines.append(f"- {tool.name}: {tool.description}")
-    lines.append("")
-    lines.append(f"Task: {task}")
+    lines.extend(
+        [
+            "",
+            "Routing rules:",
+            "- Use jd_parser when the task asks to parse or analyze a job description.",
+            "- Use resume_parser when the task asks to parse or extract fields from a resume/CV.",
+            "- Use resume_matcher when the task asks for overall resume-to-job fit, match, score, gaps, or comparison.",
+            "- Use project_auditor when the task asks whether resume claims are credible, supported, exaggerated, vague, or risky.",
+            "- Use project_ranker when the task asks which projects or experiences are most relevant to a job.",
+            "- Use null when none of the listed tools can handle the task.",
+            "",
+            f"Task: {task}",
+        ]
+    )
     return "\n".join(lines)
 
 

@@ -105,6 +105,52 @@ class TestScoreBar:
         assert bar == "`░░░░░░░░░░`"
 
 
+class _FakeLLM:
+    def __init__(self, reply="# LLM Report\nGrounded narrative.", configured=True, raises=False):
+        self.reply = reply
+        self.configured = configured
+        self.raises = raises
+
+    def is_configured(self):
+        return self.configured
+
+    def complete(self, prompt, system=None, **kwargs):
+        if self.raises:
+            raise RuntimeError("api down")
+        return self.reply
+
+
+class TestGenerateReportLLM:
+    def _inputs(self):
+        jd = JobDescription(raw_text="x", title="ML Engineer", skills=["python"])
+        resume = Resume(raw_text="x", skills=["python"])
+        result = MatchResult(matched_skills=["python"], overall_score=0.7)
+        return jd, resume, result
+
+    def test_uses_llm_when_provided(self):
+        jd, resume, result = self._inputs()
+        report = generate_report(jd, resume, result, llm=_FakeLLM())
+        assert report.full_report == "# LLM Report\nGrounded narrative."
+        # Structured fields stay deterministic.
+        assert report.overall_score == 0.7
+        assert report.matched_skills == ["python"]
+
+    def test_falls_back_to_template_on_llm_error(self):
+        jd, resume, result = self._inputs()
+        report = generate_report(jd, resume, result, llm=_FakeLLM(raises=True))
+        assert "## Overall Assessment" in report.full_report  # template marker
+
+    def test_falls_back_when_unconfigured(self):
+        jd, resume, result = self._inputs()
+        report = generate_report(jd, resume, result, llm=_FakeLLM(configured=False))
+        assert "## Overall Assessment" in report.full_report
+
+    def test_no_llm_uses_template(self):
+        jd, resume, result = self._inputs()
+        report = generate_report(jd, resume, result)
+        assert "## Overall Assessment" in report.full_report
+
+
 class TestGenerateReport:
     def test_full_report_generated(self):
         jd = JobDescription(
