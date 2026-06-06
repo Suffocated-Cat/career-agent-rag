@@ -231,7 +231,11 @@ def _discover_semantic_skills(
         return []
 
     existing_set = set(existing_skills)
-    skills_to_check = sorted(s for s in skill_vocabulary if s not in existing_set)
+    skills_to_check = sorted(
+        s
+        for s in skill_vocabulary
+        if s not in existing_set and skill_aliases.get(s, s) not in existing_set
+    )
     if not skills_to_check:
         return []
 
@@ -248,7 +252,9 @@ def _discover_semantic_skills(
     for i in range(len(candidates)):
         for j, skill in enumerate(skills_to_check):
             if float(sim_matrix[i, j]) >= SKILL_DISCOVERY_THRESHOLD:
-                discovered.add(skill_aliases.get(skill, skill))
+                canonical = skill_aliases.get(skill, skill)
+                if canonical not in existing_set:
+                    discovered.add(canonical)
 
     return sorted(discovered)
 
