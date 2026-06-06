@@ -50,8 +50,10 @@ career-agent-rag/
 │   │   ├── report_generator.py   # ReportGenerator (template-based report)
 │   │   ├── match_pipeline.py     # Rank resume items vs JD via retrieval
 │   │   ├── project_auditor.py    # Rule-based resume authenticity / risk checks
+│   │   ├── llm_client.py         # LLMClient (OpenAI-compatible chat wrapper)
 │   │   ├── agent/               # Multi-tool agent
-│   │   │   ├── controller.py      # AgentController (task → tool routing)
+│   │   │   ├── controller.py      # AgentController + KeywordToolSelector
+│   │   │   ├── selectors.py       # LLMToolSelector (LLM-based routing)
 │   │   │   └── tools.py           # Default tools wrapping the services
 │   │   └── retrieval/            # Retrieval backends (shared interface)
 │   │       ├── base.py             # Retriever protocol, tokenizer, corpus builder
@@ -93,9 +95,11 @@ career-agent-rag/
 │       ├── test_report_generator.py
 │       ├── test_match_pipeline.py
 │       ├── test_project_auditor.py
+│       ├── test_llm_client.py
 │       ├── agent/
 │       │   ├── test_controller.py
-│       │   └── test_tools.py
+│       │   ├── test_tools.py
+│       │   └── test_selectors.py
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
 │           ├── test_vector_retriever.py
@@ -177,9 +181,14 @@ This gives the Week-3 LLM a structured starting point for risk analysis instead 
 `app/services/agent/` turns CareerAgent from a fixed pipeline into a multi-tool agent. `AgentController` holds a set of `Tool`s and routes a natural-language task to the best one, then runs it against a shared `AgentContext`:
 
 - `build_default_controller()` wires the existing services as tools — `jd_parser`, `resume_parser`, `resume_matcher`, `project_auditor`, `project_ranker`.
-- `select_tool(task)` scores tools by keyword overlap and returns the best match; `run(context)` selects, executes, and returns a `ToolResult` with the chosen tool, its output, and the selection reason.
+- `run(context)` selects a tool, executes it, and returns a `ToolResult` with the chosen tool, its output, and the selection reason.
 
-Selection is currently rule-based (transparent, offline). The interface leaves room to swap in an embedding- or LLM-based selector without changing the tools or run loop.
+Selection is pluggable via the `ToolSelector` protocol:
+
+- **`KeywordToolSelector`** (default) — scores tools by keyword overlap; transparent and offline.
+- **`LLMToolSelector`** — sends the task and tool descriptions to an LLM and asks it to name the best tool (strict JSON). It degrades gracefully: if the LLM is unconfigured, errors, or returns an unknown name, it falls back to the keyword selector, so the agent never hard-fails on the model.
+
+`LLMClient` (`llm_client.py`) is a thin wrapper over any **OpenAI-compatible** chat endpoint, reading `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` from settings. The SDK client is created lazily and can be injected for testing.
 
 ## Evaluation
 

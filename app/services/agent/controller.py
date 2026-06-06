@@ -6,13 +6,14 @@ natural-language task ("analyze this JD", "check my resume for risks"), the
 controller picks the most appropriate tool and executes it against a shared
 context.
 
-Selection here is deliberately rule-based (keyword overlap) — transparent and
-offline. A smarter selector (embedding- or LLM-based) can replace
-``select_tool`` later without touching the tools or the run loop.
+Selection is pluggable via the ``ToolSelector`` protocol. The default
+``KeywordToolSelector`` is rule-based — transparent and offline. An
+LLM-backed selector (see ``selectors.py``) can be passed in instead without
+touching the tools or the run loop.
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from app.models.jd import JobDescription
 from app.models.resume import Resume
@@ -60,38 +61,67 @@ class ToolResult:
     reason: str = ""  # why this tool was selected
 
 
+@dataclass
+class Selection:
+    """A selector's choice of tool, with an explanation."""
+
+    tool: Tool | None
+    reason: str = ""
+
+
+@runtime_checkable
+class ToolSelector(Protocol):
+    """Strategy for choosing a tool given a task and the available tools."""
+
+    def select(self, task: str, tools: list[Tool]) -> Selection:
+        """Return the chosen tool (or Selection with tool=None if no fit)."""
+        ...
+
+
 def _matched_keywords(tool: Tool, task_lower: str) -> list[str]:
     """Keywords of *tool* that appear in the (lowercased) task."""
     return [kw for kw in tool.keywords if kw in task_lower]
 
 
+class KeywordToolSelector:
+    """Rule-based selector: score tools by keyword overlap with the task."""
+
+    def select(self, task: str, tools: list[Tool]) -> Selection:
+        task_lower = task.lower()
+        best: Tool | None = None
+        best_matched: list[str] = []
+        for tool in tools:
+            matched = _matched_keywords(tool, task_lower)
+            if len(matched) > len(best_matched):
+                best = tool
+                best_matched = matched
+        if best is None:
+            return Selection(tool=None, reason="no keywords matched")
+        return Selection(
+            tool=best, reason=f"matched keywords: {', '.join(best_matched)}"
+        )
+
+
 class AgentController:
     """Holds a set of tools and dispatches tasks to them."""
 
-    def __init__(self, tools: list[Tool] | None = None):
+    def __init__(
+        self,
+        tools: list[Tool] | None = None,
+        selector: ToolSelector | None = None,
+    ):
         self.tools: dict[str, Tool] = {}
         for tool in tools or []:
             self.register(tool)
+        self.selector: ToolSelector = selector or KeywordToolSelector()
 
     def register(self, tool: Tool) -> None:
         """Add (or replace) a tool by name."""
         self.tools[tool.name] = tool
 
     def select_tool(self, task: str) -> Tool | None:
-        """Pick the best-matching tool for *task*, or None if nothing matches.
-
-        Scores each tool by how many of its keywords appear in the task and
-        returns the highest scorer. Ties are broken by registration order.
-        """
-        task_lower = task.lower()
-        best: Tool | None = None
-        best_score = 0
-        for tool in self.tools.values():
-            score = len(_matched_keywords(tool, task_lower))
-            if score > best_score:
-                best_score = score
-                best = tool
-        return best
+        """Pick the best-matching tool for *task*, or None if nothing fits."""
+        return self.selector.select(task, list(self.tools.values())).tool
 
     def run(self, context: AgentContext) -> ToolResult:
         """Select a tool for ``context.task`` and execute it.
@@ -104,18 +134,17 @@ class AgentController:
             reason.
 
         Raises:
-            LookupError: If no registered tool matches the task.
+            LookupError: If no tool is selected for the task.
         """
-        tool = self.select_tool(context.task)
-        if tool is None:
+        selection = self.selector.select(context.task, list(self.tools.values()))
+        if selection.tool is None:
             raise LookupError(f"No tool matched task: {context.task!r}")
 
-        matched = _matched_keywords(tool, context.task.lower())
-        output = tool.handler(context)
+        output = selection.tool.handler(context)
         return ToolResult(
-            tool=tool.name,
+            tool=selection.tool.name,
             output=output,
-            reason=f"matched keywords: {', '.join(matched)}",
+            reason=selection.reason,
         )
 
     def describe_tools(self) -> list[dict[str, str]]:
