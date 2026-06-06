@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # HuggingFace
     HF_ENDPOINT: str | None = None
 
+    # LLM provider
+    LLM_API_KEY: str | None = None
+    LLM_BASE_URL: str | None = None
+    LLM_MODEL: str | None = None
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

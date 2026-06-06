@@ -50,6 +50,9 @@ career-agent-rag/
 │   │   ├── report_generator.py   # ReportGenerator (template-based report)
 │   │   ├── match_pipeline.py     # Rank resume items vs JD via retrieval
 │   │   ├── project_auditor.py    # Rule-based resume authenticity / risk checks
+│   │   ├── agent/               # Multi-tool agent
+│   │   │   ├── controller.py      # AgentController (task → tool routing)
+│   │   │   └── tools.py           # Default tools wrapping the services
 │   │   └── retrieval/            # Retrieval backends (shared interface)
 │   │       ├── base.py             # Retriever protocol, tokenizer, corpus builder
 │   │       ├── bm25_retriever.py   # BM25Retriever (Okapi BM25, lexical recall)
@@ -90,6 +93,9 @@ career-agent-rag/
 │       ├── test_report_generator.py
 │       ├── test_match_pipeline.py
 │       ├── test_project_auditor.py
+│       ├── agent/
+│       │   ├── test_controller.py
+│       │   └── test_tools.py
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
 │           ├── test_vector_retriever.py
@@ -165,6 +171,15 @@ The `app/services/retrieval/` package treats the resume (its experiences and pro
 - **unsupported_project_claim** — a project lists advanced technologies its description does not substantiate (too thin, or never mentions them).
 
 This gives the Week-3 LLM a structured starting point for risk analysis instead of auditing from scratch. The audit is exposed standalone at `POST /api/v1/audit`, attached to every `/match` result as `project_audit`, and rendered as a "Project Risk Audit" section in the generated report.
+
+## Agent
+
+`app/services/agent/` turns CareerAgent from a fixed pipeline into a multi-tool agent. `AgentController` holds a set of `Tool`s and routes a natural-language task to the best one, then runs it against a shared `AgentContext`:
+
+- `build_default_controller()` wires the existing services as tools — `jd_parser`, `resume_parser`, `resume_matcher`, `project_auditor`, `project_ranker`.
+- `select_tool(task)` scores tools by keyword overlap and returns the best match; `run(context)` selects, executes, and returns a `ToolResult` with the chosen tool, its output, and the selection reason.
+
+Selection is currently rule-based (transparent, offline). The interface leaves room to swap in an embedding- or LLM-based selector without changing the tools or run loop.
 
 ## Evaluation
 
