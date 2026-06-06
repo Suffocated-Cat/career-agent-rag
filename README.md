@@ -67,10 +67,11 @@ career-agent-rag/
 │   │   ├── tools.py             # MCP tool implementations (dict in/out)
 │   │   ├── server.py            # FastMCP server exposing the tools
 │   │   └── client.py            # MCPClient (connect + call tools over stdio)
-│   ├── eval/                  # Retrieval evaluation harness
+│   ├── eval/                  # Evaluation harnesses
 │   │   ├── metrics.py           # recall@k, MRR, nDCG@k
 │   │   ├── datasets.py          # fixture loaders (corpus + labeled queries)
-│   │   └── runner.py            # evaluate_retriever() → EvalReport
+│   │   ├── runner.py            # evaluate_retriever() → EvalReport
+│   │   └── selector_eval.py     # evaluate_selector() → SelectorReport
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -87,11 +88,13 @@ career-agent-rag/
 │   │   ├── retrieval_documents.json # Pooled resume corpus (with stable ids)
 │   │   ├── relevance_queries.json   # Queries + graded relevance labels
 │   │   ├── sample_jobs.json         # Eval jobs (job_id link + requirements)
-│   │   └── job_descriptions.json    # Same jobs in JobDescription model shape
+│   │   ├── job_descriptions.json    # Same jobs in JobDescription model shape
+│   │   └── tool_selection.json      # Labeled task → expected tool cases
 │   ├── eval/
 │   │   ├── test_metrics.py          # recall@k, MRR, nDCG@k
 │   │   ├── test_datasets.py         # fixture loaders
-│   │   └── test_runner.py           # evaluate_retriever over fixtures
+│   │   ├── test_runner.py           # evaluate_retriever over fixtures
+│   │   └── test_selector_eval.py    # evaluate_selector over fixtures
 │   ├── mcp/
 │   │   ├── test_tools.py            # MCP tool implementations
 │   │   ├── test_server.py           # FastMCP server (list/call tools)
@@ -199,6 +202,8 @@ Selection is pluggable via the `ToolSelector` protocol:
 - **`LLMToolSelector`** — sends the task and tool descriptions to an LLM and asks it to name the best tool (strict JSON). It degrades gracefully: if the LLM is unconfigured, errors, or returns an unknown name, it falls back to the keyword selector, so the agent never hard-fails on the model.
 
 Pass a `Tracer` to the controller to record every run as a `TraceEntry` — task, selected tool, selection reason, latency, and status (`ok` / `error` / `no_tool`, with the error message on failures). `ToolResult` also carries `latency_ms`. This is the audit trail for debugging wrong tool selection and tool failures (`tracer.as_dicts()` serializes it for logs or an API).
+
+`eval/selector_eval.py` evaluates a selector against a labeled task→tool dataset (`tests/fixtures/tool_selection.json`): `evaluate_selector(selector, tools, cases)` returns per-case results and overall accuracy. On the bundled set the keyword selector scores **0.875** and the LLM selector **1.000** — the LLM resolves the ambiguous phrasings ("how well does my resume *match*…", "best *fit*…") that tie under keyword scoring.
 
 `LLMClient` (`llm_client.py`) is a thin wrapper over any **OpenAI-compatible** chat endpoint, reading `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` from settings. The SDK client is created lazily and can be injected for testing.
 
