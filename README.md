@@ -45,7 +45,10 @@ career-agent-rag/
 │   │   ├── resume_parser.py      # ResumeParser (rule + embedding)
 │   │   ├── keyword_matcher.py    # KeywordMatcher (keyword + vector)
 │   │   ├── vector_matcher.py     # VectorMatcher (semantic match)
-│   │   └── report_generator.py   # ReportGenerator (template-based report)
+│   │   ├── report_generator.py   # ReportGenerator (template-based report)
+│   │   └── retrieval/            # Retrieval backends (shared interface)
+│   │       ├── base.py           # Retriever protocol, tokenizer, corpus builder
+│   │       └── bm25_retriever.py # BM25Retriever (Okapi BM25, lexical recall)
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -62,7 +65,9 @@ career-agent-rag/
 │       ├── test_resume_parser.py
 │       ├── test_keyword_matcher.py
 │       ├── test_vector_matcher.py
-│       └── test_report_generator.py
+│       ├── test_report_generator.py
+│       └── retrieval/
+│           └── test_bm25_retriever.py
 ├── frontend/                # Reserved for future frontend
 ├── experiments/             # Standalone experiment scripts
 │   ├── day1_embedding_demo.py
@@ -104,6 +109,16 @@ The overall score is skill-first:
 - Keyword-only fallback: `90% skill coverage`
 
 `POST /api/v1/match/report` turns the match result into a template-based markdown report with skill gaps, experience alignment, and recommendations.
+
+## Retrieval
+
+The `app/services/retrieval/` package treats the resume (its experiences and projects) as a searchable corpus and ranks documents against a JD-derived query. All backends share one interface — `search(query, k) -> list[RetrievalResult]` — so they can be swapped or composed:
+
+- **BM25Retriever** — Okapi BM25 implemented from scratch (lexical/keyword recall). Scores documents by IDF-weighted, length-normalized term frequency with configurable `k1` / `b`. Matches exact tech terms (PyTorch, Docker, Kubernetes) that embeddings tend to blur.
+
+`corpus_from_resume(resume)` builds the document list (one entry per experience and project), and a tech-aware tokenizer preserves tokens like `c++`, `c#`, and `node.js`.
+
+Vector, hybrid, and reranking backends layer onto the same interface next.
 
 ## Development (Docker)
 
