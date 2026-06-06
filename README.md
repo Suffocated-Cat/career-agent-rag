@@ -62,9 +62,10 @@ career-agent-rag/
 │   │       ├── hybrid_retriever.py # HybridRetriever (RRF / weighted fusion)
 │   │       ├── reranker.py         # Reranker + RerankingRetriever (cross-encoder)
 │   │       └── factory.py          # build_retriever(method, ...) ablation switch
-│   ├── mcp/                   # MCP server (FastMCP)
+│   ├── mcp/                   # MCP server + client
 │   │   ├── tools.py             # MCP tool implementations (dict in/out)
-│   │   └── server.py            # FastMCP server exposing the tools
+│   │   ├── server.py            # FastMCP server exposing the tools
+│   │   └── client.py            # MCPClient (connect + call tools over stdio)
 │   ├── eval/                  # Retrieval evaluation harness
 │   │   ├── metrics.py           # recall@k, MRR, nDCG@k
 │   │   ├── datasets.py          # fixture loaders (corpus + labeled queries)
@@ -92,7 +93,8 @@ career-agent-rag/
 │   │   └── test_runner.py           # evaluate_retriever over fixtures
 │   ├── mcp/
 │   │   ├── test_tools.py            # MCP tool implementations
-│   │   └── test_server.py           # FastMCP server (list/call tools)
+│   │   ├── test_server.py           # FastMCP server (list/call tools)
+│   │   └── test_client.py           # MCPClient (unit + live server)
 │   └── services/
 │       ├── test_jd_parser.py
 │       ├── test_resume_parser.py
@@ -208,6 +210,16 @@ Run it as a stdio MCP server:
 ```bash
 docker compose exec backend python -m app.mcp.server
 ```
+
+`client.py` provides `MCPClient`, an async context manager that launches/connects to an MCP server (this project's by default) and calls tools over the protocol:
+
+```python
+async with MCPClient() as client:
+    names = await client.list_tools()
+    result = await client.call_tool("parse_jd", {"raw_text": "..."})
+```
+
+It decodes JSON tool output to dicts/lists and raises `MCPToolError` when the server reports a failed call.
 
 ## Evaluation
 
