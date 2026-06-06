@@ -1,6 +1,56 @@
 # CareerAgent
 
-Agentic RAG system for technical job matching, resume analysis, and interview preparation.
+CareerAgent is an agentic RAG backend for technical job matching, resume analysis, project relevance ranking, and interview-prep reporting. It combines deterministic scoring, lexical/vector retrieval, optional LLM augmentation, MCP tool exposure, and an evaluation harness.
+
+The project is intended as a serious AI backend / RAG engineering prototype: runnable through Docker, covered by tests, and designed so LLM output explains structured evidence rather than replacing deterministic scores.
+
+## Status
+
+- Backend: FastAPI service with versioned APIs under `/api/v1`
+- Retrieval: BM25, vector, hybrid fusion, and optional reranking
+- Agent: keyword and LLM-based tool selection with trace logging
+- LLM: optional OpenAI-compatible client with deterministic fallback
+- MCP: stdio server exposing the core tools
+- Evaluation: retrieval metrics, ablation runner, selector evaluation, LLM-as-judge, latency/cost utilities
+- Tests: `417 passed`, `97%` coverage in Docker on Python 3.11.15
+
+Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
+
+## Quick Start
+
+Docker is the recommended way to run the project because the app targets Python 3.11+ and depends on ML packages that are easier to reproduce in a container.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The API will be available at:
+
+- Service index: `http://localhost:8000/`
+- Health check: `http://localhost:8000/health`
+- Swagger docs: `http://localhost:8000/docs`
+
+Run the test suite inside the container:
+
+```bash
+docker compose exec backend pytest -q
+docker compose exec backend pytest --cov=app --cov-report=term-missing -q
+```
+
+Run the MCP server:
+
+```bash
+docker compose exec backend python -m app.mcp.server
+```
+
+Run the end-to-end career match skill:
+
+```bash
+docker compose exec backend python -m app.skills.career_match --jd JD.txt --resume RESUME.txt
+```
+
+Use `--no-llm` for a fully deterministic run.
 
 ## Architecture
 
@@ -17,7 +67,7 @@ Agent Controller
        ↓
 MCP Tools
        ↓
-GPT / LLM Report Generation
+Optional LLM Report Generation
        ↓
 Match Analysis + Skill Gap + Learning Plan
 ```
@@ -313,27 +363,30 @@ This catches real drift: on a live grounded report the judge scored coverage and
 
 Example over 3 live LLM calls: p50 ≈ 2.8s, p95 ≈ 4.2s; 269 total tokens ≈ $0.0003 at example pricing. (LLM latency dominates; the deterministic retrieval/audit paths are sub-second.)
 
-## Development (Docker)
+## Development
 
 ### Prerequisites
 
 - Docker & Docker Compose
+- Python 3.11+ if you run the project outside Docker
 
-### Quick Start
+The container image uses `python:3.11-slim-bookworm`. Local Python versions older than 3.10 will fail on modern type syntax such as `Any | None`; using Docker avoids that mismatch.
+
+### Docker
 
 ```bash
-# Copy environment config
 cp .env.example .env
-
-# Build and start the development server
 docker compose up --build
-
-# The API is available at http://localhost:8000
 ```
 
-### Hot Reload
-
 The development server uses `uvicorn --reload` with volume-mounted code. Edit any file on your host — the server restarts automatically.
+
+### Running Tests
+
+```bash
+docker compose exec backend pytest -q
+docker compose exec backend pytest --cov=app --cov-report=term-missing -q
+```
 
 ### Running Experiments
 
@@ -355,12 +408,6 @@ docker compose exec backend python experiments/day5_self_attention_demo.py
 
 # Day 6: Multi-head attention demo
 docker compose exec backend python experiments/day6_multi_head_attention_demo.py
-```
-
-### Running Tests
-
-```bash
-docker compose exec backend pytest tests/ -v
 ```
 
 ## Development Plan
