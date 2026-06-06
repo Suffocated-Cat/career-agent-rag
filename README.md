@@ -62,6 +62,9 @@ career-agent-rag/
 │   │       ├── hybrid_retriever.py # HybridRetriever (RRF / weighted fusion)
 │   │       ├── reranker.py         # Reranker + RerankingRetriever (cross-encoder)
 │   │       └── factory.py          # build_retriever(method, ...) ablation switch
+│   ├── mcp/                   # MCP server (FastMCP)
+│   │   ├── tools.py             # MCP tool implementations (dict in/out)
+│   │   └── server.py            # FastMCP server exposing the tools
 │   ├── eval/                  # Retrieval evaluation harness
 │   │   ├── metrics.py           # recall@k, MRR, nDCG@k
 │   │   ├── datasets.py          # fixture loaders (corpus + labeled queries)
@@ -87,6 +90,9 @@ career-agent-rag/
 │   │   ├── test_metrics.py          # recall@k, MRR, nDCG@k
 │   │   ├── test_datasets.py         # fixture loaders
 │   │   └── test_runner.py           # evaluate_retriever over fixtures
+│   ├── mcp/
+│   │   ├── test_tools.py            # MCP tool implementations
+│   │   └── test_server.py           # FastMCP server (list/call tools)
 │   └── services/
 │       ├── test_jd_parser.py
 │       ├── test_resume_parser.py
@@ -189,6 +195,19 @@ Selection is pluggable via the `ToolSelector` protocol:
 - **`LLMToolSelector`** — sends the task and tool descriptions to an LLM and asks it to name the best tool (strict JSON). It degrades gracefully: if the LLM is unconfigured, errors, or returns an unknown name, it falls back to the keyword selector, so the agent never hard-fails on the model.
 
 `LLMClient` (`llm_client.py`) is a thin wrapper over any **OpenAI-compatible** chat endpoint, reading `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` from settings. The SDK client is created lazily and can be injected for testing.
+
+## MCP Server
+
+`app/mcp/` exposes CareerAgent's capabilities as **MCP** tools via a FastMCP server, so any MCP host (e.g. Claude Desktop) or MCP client can discover and call them: `parse_jd`, `parse_resume`, `match_resume`, `audit_resume`, `rank_projects`.
+
+- `tools.py` — the tool implementations (dict in, dict out), kept dependency-free and unit-tested.
+- `server.py` — registers them on a FastMCP server with JSON-Schema input schemas derived from the type hints, and lazily attaches the embedding service.
+
+Run it as a stdio MCP server:
+
+```bash
+docker compose exec backend python -m app.mcp.server
+```
 
 ## Evaluation
 
