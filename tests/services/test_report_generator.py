@@ -1,7 +1,7 @@
 """Tests for ReportGenerator — template-based matching report generation."""
 import pytest
 from app.models.jd import JobDescription
-from app.models.resume import Resume, ResumeExperience
+from app.models.resume import Resume, ResumeExperience, ResumeProject
 from app.models.match import (
     MatchResult,
     MatchReport,
@@ -213,3 +213,34 @@ class TestGenerateReport:
 
         report = generate_report(jd, resume, result)
         assert "Experience Alignment" not in report.full_report
+
+    def test_risk_audit_section_omitted_when_absent(self):
+        jd = JobDescription(raw_text="", skills=["python"])
+        resume = Resume(raw_text="", skills=["python"])
+        result = MatchResult(matched_skills=["python"])  # no project_audit
+
+        report = generate_report(jd, resume, result)
+        assert report.project_audit is None
+        assert "Project Risk Audit" not in report.full_report
+
+    def test_risk_audit_section_rendered_when_present(self):
+        from app.services.project_auditor import audit_resume
+
+        jd = JobDescription(raw_text="", skills=["python"])
+        resume = Resume(
+            raw_text="...",
+            skills=["python", "rag", "agent"],
+            projects=[
+                ResumeProject(
+                    name="LLM Assistant",
+                    description="A chatbot.",
+                    technologies=["rag", "agent"],
+                )
+            ],
+        )
+        result = MatchResult(project_audit=audit_resume(resume))
+
+        report = generate_report(jd, resume, result)
+        assert report.project_audit is not None
+        assert "## Project Risk Audit" in report.full_report
+        assert "| Severity | Category | Subject | Detail |" in report.full_report

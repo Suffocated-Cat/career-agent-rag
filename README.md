@@ -33,7 +33,8 @@ career-agent-rag/
 │   │   └── v1/              # API v1 endpoints
 │   │       ├── jd.py        # POST /api/v1/jd/parse
 │   │       ├── resume.py    # POST /api/v1/resume/parse
-│   │       └── match.py     # POST /api/v1/match
+│   │       ├── match.py     # POST /api/v1/match, /api/v1/match/report
+│   │       └── audit.py     # POST /api/v1/audit
 │   ├── models/              # Pydantic data schemas
 │   │   ├── jd.py
 │   │   ├── resume.py
@@ -70,7 +71,8 @@ career-agent-rag/
 │   │   └── v1/
 │   │       ├── test_jd.py
 │   │       ├── test_resume.py
-│   │       └── test_match.py
+│   │       ├── test_match.py
+│   │       └── test_audit.py
 │   ├── fixtures/            # Evaluation dataset
 │   │   ├── retrieval_documents.json # Pooled resume corpus (with stable ids)
 │   │   ├── relevance_queries.json   # Queries + graded relevance labels
@@ -113,8 +115,9 @@ career-agent-rag/
 | GET | `/health` | Health check |
 | POST | `/api/v1/jd/parse` | Parse job description |
 | POST | `/api/v1/resume/parse` | Parse resume |
-| POST | `/api/v1/match` | Match JD against resume (keyword + vector) |
-| POST | `/api/v1/match/report` | Generate matching report |
+| POST | `/api/v1/match` | Match JD against resume (skills, relevance, risk audit) |
+| POST | `/api/v1/match/report` | Generate matching report (incl. risk audit) |
+| POST | `/api/v1/audit` | Audit a resume for authenticity / quality risks |
 
 Swagger docs: `http://localhost:8000/docs`
 
@@ -161,7 +164,7 @@ The `app/services/retrieval/` package treats the resume (its experiences and pro
 - **vague_experience** — a highlight claims impact or effort without quantification (no numbers/percentages).
 - **unsupported_project_claim** — a project lists advanced technologies its description does not substantiate (too thin, or never mentions them).
 
-This gives the Week-3 LLM a structured starting point for risk analysis instead of auditing from scratch.
+This gives the Week-3 LLM a structured starting point for risk analysis instead of auditing from scratch. The audit is exposed standalone at `POST /api/v1/audit`, attached to every `/match` result as `project_audit`, and rendered as a "Project Risk Audit" section in the generated report.
 
 ## Evaluation
 

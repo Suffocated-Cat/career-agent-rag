@@ -101,6 +101,35 @@ def test_match_response_includes_project_relevance(client):
     assert top["normalized_score"] == 1.0
 
 
+def test_match_response_includes_project_audit(client):
+    """POST /api/v1/match should include the authenticity risk audit."""
+    response = client.post(
+        "/api/v1/match",
+        json={
+            "jd": {"raw_text": "ML role", "skills": ["python"]},
+            "resume": {
+                "raw_text": "...",
+                "skills": ["python", "rag", "agent"],
+                "projects": [
+                    {
+                        "name": "LLM Assistant",
+                        "description": "A chatbot.",
+                        "technologies": ["rag", "agent"],
+                    }
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()["data"]
+    assert "project_audit" in result
+    audit = result["project_audit"]
+    assert audit is not None
+    assert "findings" in audit
+    assert 0.0 <= audit["risk_score"] <= 1.0
+
+
 def test_generate_report_returns_200(client):
     """POST /api/v1/match/report should return 200 with valid report schema."""
     response = client.post(
@@ -145,3 +174,8 @@ def test_generate_report_returns_200(client):
     assert "full_report" in report
     assert len(report["full_report"]) > 0
     assert 0.0 <= report["overall_score"] <= 1.0
+
+    # Risk audit is surfaced in the report and its markdown.
+    assert "project_audit" in report
+    assert report["project_audit"] is not None
+    assert "Project Risk Audit" in report["full_report"]

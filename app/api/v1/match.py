@@ -14,6 +14,7 @@ from app.models.resume import Resume
 from app.services.embedding import EmbeddingService
 from app.services.keyword_matcher import match as match_jd_resume
 from app.services.match_pipeline import rank_resume_projects
+from app.services.project_auditor import audit_resume
 from app.services.report_generator import generate_report
 
 router = APIRouter()
@@ -42,6 +43,7 @@ def _run_match(jd: JobDescription, resume: Resume) -> MatchResult:
     result.project_relevance = rank_resume_projects(
         jd, resume, embedding_service=embedding_service, method=method
     )
+    result.project_audit = audit_resume(resume)
     return result
 
 

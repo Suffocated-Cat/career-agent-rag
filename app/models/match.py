@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 
 from app.models.jd import JobDescription
 from app.models.resume import Resume
+from app.models.audit import ProjectAuditReport
 
 
 class SkillMatchDetail(BaseModel):
@@ -49,6 +50,9 @@ class MatchResult(BaseModel):
     # ── Retrieval-based project relevance ───────────────────────────────
     project_relevance: list[ProjectRelevance] = Field(default_factory=list)
 
+    # ── Authenticity / risk audit ───────────────────────────────────────
+    project_audit: ProjectAuditReport | None = Field(default=None)
+
 
 class MatchRequest(BaseModel):
     """Request body for matching endpoint."""
@@ -77,6 +81,7 @@ class MatchReport(BaseModel):
     experience_alignment: list[ExperienceMatchDetail] = Field(default_factory=list)
     skill_gap_analysis: str = ""  # human-readable gap description
     recommendations: str = ""  # next steps / learning focus
+    project_audit: ProjectAuditReport | None = None  # authenticity / risk audit
     full_report: str = ""  # complete markdown report
 
 
