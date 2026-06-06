@@ -14,7 +14,9 @@ Pipeline:
   4. Embedding-based semantic skill discovery (fallback)
   5. Rule-based entity extraction (experience, education, projects)
 
-Replaced by LLM-based parsing in Week 3.
+When an LLM client is supplied, ``parse_resume`` instead extracts the fields
+with the LLM (schema-validated), falling back to this rule-based pipeline on
+any failure or when the LLM is not configured.
 """
 
 import re

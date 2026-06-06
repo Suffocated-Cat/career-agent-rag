@@ -138,8 +138,8 @@ career-agent-rag/
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
-| POST | `/api/v1/jd/parse` | Parse job description |
-| POST | `/api/v1/resume/parse` | Parse resume |
+| POST | `/api/v1/jd/parse` | Parse job description (LLM extraction, rule fallback) |
+| POST | `/api/v1/resume/parse` | Parse resume (LLM extraction, rule fallback) |
 | POST | `/api/v1/match` | Match JD against resume (skills, relevance, risk audit) |
 | POST | `/api/v1/match/report` | Generate matching report (incl. risk audit) |
 | POST | `/api/v1/audit` | Audit a resume for authenticity / quality risks |
@@ -222,7 +222,7 @@ The architecture keeps a **deterministic core** (rules, retrieval, vector/BM25 s
 
 The same pattern is applied across tools, deterministic-core-first:
 
-- **`parse_jd` / `parse_resume`** accept an optional `llm=`: when configured, fields are **extracted by the LLM** (validated into `JobDescription` / `Resume` via `generate_model`, with the rule-based parse as the fallback) — better on messy inputs. Skills are normalized to lowercase to match the rule convention.
+- **`parse_jd` / `parse_resume`** accept an optional `llm=`: when configured, fields are **extracted by the LLM** (validated into `JobDescription` / `Resume` via `generate_model`, with the rule-based parse as the fallback) — better on messy inputs. Skills are normalized to lowercase to match the rule convention. The `/api/v1/jd/parse` and `/api/v1/resume/parse` endpoints use the LLM when configured.
 - **`audit_resume`** accepts an optional `llm=`: rule findings and the risk score stay deterministic; the LLM only adds **how-to-fix `advice`** grounded on those findings. Exposed on the standalone `POST /api/v1/audit` path (kept out of the hot `/match` path to keep matching fast).
 - `resume_matcher` and `project_ranker` stay **pure scoring** — their explanations live in the LLM report, not per-tool, so the score/ranking the eval harness depends on never goes through the model.
 

@@ -15,7 +15,9 @@ Pipeline:
   4. Embedding-based semantic skill discovery (fallback)
   5. Bullet-item extraction for responsibilities / nice-to-haves
 
-Replaced by LLM-based parsing in Week 3.
+When an LLM client is supplied, ``parse_jd`` instead extracts the fields with
+the LLM (schema-validated), falling back to this rule-based pipeline on any
+failure or when the LLM is not configured.
 """
 
 import re

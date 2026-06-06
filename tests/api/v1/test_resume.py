@@ -1,5 +1,19 @@
-def test_parse_resume_returns_200(client):
+class _FakeLLM:
+    def __init__(self, reply="", configured=True):
+        self.reply = reply
+        self.configured = configured
+
+    def is_configured(self):
+        return self.configured
+
+    def complete(self, prompt, system=None, **kwargs):
+        return self.reply
+
+
+def test_parse_resume_returns_200(client, monkeypatch):
     """POST /api/v1/resume/parse should return 200 with valid response schema."""
+    # Unconfigured LLM → deterministic rule-based parsing (offline).
+    monkeypatch.setattr("app.api.v1.resume._get_llm", lambda: _FakeLLM(configured=False))
     response = client.post(
         "/api/v1/resume/parse",
         json={"raw_text": "Python developer with 5 years experience at Google."},
@@ -15,8 +29,34 @@ def test_parse_resume_returns_200(client):
     assert isinstance(data["data"]["experience"], list)
 
 
+def test_parse_resume_uses_llm_when_configured(client, monkeypatch):
+    """When the LLM is configured, the endpoint returns LLM-extracted fields."""
+    reply = (
+        '{"skills": ["Rust"], "experience": [], "education": [], '
+        '"projects": [{"name": "CLI", "description": "a tool", "technologies": ["rust"]}]}'
+    )
+    monkeypatch.setattr("app.api.v1.resume._get_llm", lambda: _FakeLLM(reply=reply))
+    response = client.post("/api/v1/resume/parse", json={"raw_text": "some resume text"})
+
+    assert response.status_code == 200
+    resume = response.json()["data"]
+    assert resume["skills"] == ["rust"]  # lowercased
+    assert resume["projects"][0]["name"] == "CLI"
+    assert resume["raw_text"] == "some resume text"
+
+
 def test_parse_resume_empty_text_rejected(client):
     """POST /api/v1/resume/parse with empty raw_text should return 422."""
     response = client.post("/api/v1/resume/parse", json={"raw_text": ""})
 
     assert response.status_code == 422
+
+
+def test_get_llm_builds_client():
+    """_get_llm constructs a real LLMClient (offline; no network on build)."""
+    from app.api.v1.resume import _get_llm
+    from app.services.llm_client import LLMClient
+
+    _get_llm.cache_clear()
+    assert isinstance(_get_llm(), LLMClient)
+    _get_llm.cache_clear()
