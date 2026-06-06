@@ -7,18 +7,28 @@ class _Msg:
         self.message = type("M", (), {"content": content})
 
 
+class _Usage:
+    def __init__(self, prompt, completion, total):
+        self.prompt_tokens = prompt
+        self.completion_tokens = completion
+        self.total_tokens = total
+
+
 class FakeOpenAI:
     """Stand-in for the OpenAI SDK client, recording the call."""
 
-    def __init__(self, reply="hello", **kwargs):
+    def __init__(self, reply="hello", usage=None, **kwargs):
         self.reply = reply
+        self.usage = usage
         self.init_kwargs = kwargs
         self.calls = []
         self.chat = type("Chat", (), {"completions": self})()
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return type("Resp", (), {"choices": [_Msg(self.reply)]})()
+        return type(
+            "Resp", (), {"choices": [_Msg(self.reply)], "usage": self.usage}
+        )()
 
 
 class TestIsConfigured:
@@ -65,6 +75,32 @@ class TestComplete:
         fake = FakeOpenAI()
         LLMClient(api_key="k", model="m", client=fake).complete("q")
         assert fake.calls[0]["temperature"] == 0.0
+
+
+class TestUsageCapture:
+    def test_records_last_usage(self):
+        fake = FakeOpenAI(usage=_Usage(10, 5, 15))
+        llm = LLMClient(api_key="k", model="m", client=fake)
+        llm.complete("q")
+        assert llm.last_usage.prompt_tokens == 10
+        assert llm.last_usage.completion_tokens == 5
+        assert llm.last_usage.total_tokens == 15
+
+    def test_no_usage_leaves_last_usage_none(self):
+        llm = LLMClient(api_key="k", model="m", client=FakeOpenAI(usage=None))
+        llm.complete("q")
+        assert llm.last_usage is None
+
+    def test_feeds_usage_tracker(self):
+        from app.services.usage import UsageTracker
+
+        tracker = UsageTracker()
+        fake = FakeOpenAI(usage=_Usage(10, 5, 15))
+        llm = LLMClient(api_key="k", model="m", client=fake, usage_tracker=tracker)
+        llm.complete("q")
+        llm.complete("q")
+        assert tracker.calls == 2
+        assert tracker.total_tokens == 30
 
 
 class TestLazyClient:

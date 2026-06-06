@@ -52,6 +52,7 @@ career-agent-rag/
 │   │   ├── project_auditor.py    # Rule-based resume authenticity / risk checks
 │   │   ├── llm_client.py         # LLMClient (OpenAI-compatible chat wrapper)
 │   │   ├── llm_support.py        # LLM helpers w/ deterministic fallback + schema validation
+│   │   ├── usage.py              # TokenUsage / UsageTracker / estimate_cost
 │   │   ├── agent/               # Multi-tool agent
 │   │   │   ├── controller.py      # AgentController + KeywordToolSelector
 │   │   │   ├── selectors.py       # LLMToolSelector (LLM-based routing)
@@ -74,7 +75,8 @@ career-agent-rag/
 │   │   ├── runner.py            # evaluate_retriever() → EvalReport
 │   │   ├── selector_eval.py     # evaluate_selector() → SelectorReport
 │   │   ├── ablation.py          # run_ablation() across retrieval methods
-│   │   └── llm_judge.py         # LLM-as-Judge: grounding + quality scoring
+│   │   ├── llm_judge.py         # LLM-as-Judge: grounding + quality scoring
+│   │   └── perf.py              # LatencyRecorder + p50/p95/p99 stats
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -99,7 +101,8 @@ career-agent-rag/
 │   │   ├── test_runner.py           # evaluate_retriever over fixtures
 │   │   ├── test_selector_eval.py    # evaluate_selector over fixtures
 │   │   ├── test_ablation.py         # ablation harness
-│   │   └── test_llm_judge.py        # LLM-as-Judge
+│   │   ├── test_llm_judge.py        # LLM-as-Judge
+│   │   └── test_perf.py             # latency stats
 │   ├── mcp/
 │   │   ├── test_tools.py            # MCP tool implementations
 │   │   ├── test_server.py           # FastMCP server (list/call tools)
@@ -114,6 +117,7 @@ career-agent-rag/
 │       ├── test_project_auditor.py
 │       ├── test_llm_client.py
 │       ├── test_llm_support.py
+│       ├── test_usage.py
 │       ├── agent/
 │       │   ├── test_controller.py
 │       │   ├── test_tools.py
@@ -281,6 +285,13 @@ Takeaways on this set: **vector retrieval wins on Recall@10** — the queries in
 `app/eval/llm_judge.py` evaluates *generated* text (e.g. the LLM report) against the structured evidence it should be grounded on. `judge_report(llm, output_text, evidence)` returns a `JudgeVerdict` scoring **groundedness / coverage / clarity** (1–5) and listing **unsupported claims** — the automated hallucination check for the report generator. It runs through the same `generate_model` path (schema-validated, corrective retry), so a judge failure yields an *unevaluated* verdict rather than raising.
 
 This catches real drift: on a live grounded report the judge scored coverage and clarity 5 but groundedness 3, flagging the coaching-style suggestions the report had added beyond the structured data — exactly the kind of "fluent but unsupported" addition the deterministic-core architecture is meant to keep in check.
+
+### Latency & cost
+
+- `app/eval/perf.py` — `LatencyRecorder.measure()` times code blocks and `stats()` summarizes them as **p50 / p95 / p99 / mean / max** (percentiles describe tail behavior the mean hides).
+- `app/services/usage.py` — `TokenUsage` / `UsageTracker` accumulate token counts, and `estimate_cost(usage, input_per_mtok, output_per_mtok)` converts them to dollars. `LLMClient` captures `response.usage` into `last_usage` and feeds an optional `usage_tracker`, so cost is tracked transparently across calls.
+
+Example over 3 live LLM calls: p50 ≈ 2.8s, p95 ≈ 4.2s; 269 total tokens ≈ $0.0003 at example pricing. (LLM latency dominates; the deterministic retrieval/audit paths are sub-second.)
 
 ## Development (Docker)
 

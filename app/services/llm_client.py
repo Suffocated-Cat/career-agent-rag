@@ -10,6 +10,7 @@ testing or to share one instance.
 from typing import Any
 
 from app.core.config import settings
+from app.services.usage import TokenUsage, UsageTracker
 
 
 class LLMClient:
@@ -28,6 +29,7 @@ class LLMClient:
         base_url: str | None = None,
         model: str | None = None,
         client: Any | None = None,
+        usage_tracker: UsageTracker | None = None,
     ):
         """Configure the client.
 
@@ -38,11 +40,15 @@ class LLMClient:
             model: Model id to call (default: settings.LLM_MODEL).
             client: A pre-built OpenAI-compatible client to use directly;
                 when given, no SDK client is created lazily.
+            usage_tracker: Optional tracker to accumulate token usage across
+                calls.
         """
         self.api_key = api_key or settings.LLM_API_KEY
         self.base_url = base_url or settings.LLM_BASE_URL
         self.model = model or settings.LLM_MODEL
         self._client = client
+        self.usage_tracker = usage_tracker
+        self.last_usage: TokenUsage | None = None
 
     def is_configured(self) -> bool:
         """True if an API key and model are set (ready to make calls)."""
@@ -85,4 +91,18 @@ class LLMClient:
             temperature=temperature,
             **kwargs,
         )
+        self._record_usage(response)
         return response.choices[0].message.content
+
+    def _record_usage(self, response: Any) -> None:
+        """Capture token usage from a response, if present."""
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        self.last_usage = TokenUsage(
+            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            total_tokens=getattr(usage, "total_tokens", 0) or 0,
+        )
+        if self.usage_tracker is not None:
+            self.usage_tracker.add(self.last_usage)
