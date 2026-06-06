@@ -6,22 +6,27 @@ from app.services.llm_support import extract_json, generate_model, generate_text
 
 
 class FakeLLM:
-    def __init__(self, reply="", configured=True, raises=False, fail_first=0):
+    def __init__(self, reply="", configured=True, raises=False, fail_first=0, replies=None):
         self.reply = reply
         self.configured = configured
         self.raises = raises
         self.fail_first = fail_first  # first N calls raise, then succeed
+        self.replies = replies  # optional sequence of successive replies
         self.calls = 0
+        self.prompts = []
 
     def is_configured(self):
         return self.configured
 
     def complete(self, prompt, system=None, **kwargs):
         self.calls += 1
+        self.prompts.append(prompt)
         if self.raises:
             raise RuntimeError("api down")
         if self.calls <= self.fail_first:
             raise RuntimeError("transient failure")
+        if self.replies is not None:
+            return self.replies[min(self.calls - 1, len(self.replies) - 1)]
         return self.reply
 
 
@@ -121,3 +126,28 @@ class TestGenerateModel:
         out = generate_model(llm, "q", Person, fb, retries=0)
         assert out is fb
         assert llm.calls == 1
+
+    def test_retry_is_corrective(self):
+        # First reply is invalid (missing 'age'); the retry prompt must feed
+        # back the bad output + error + schema so the model can fix it.
+        llm = FakeLLM(
+            replies=['{"name": "Ann"}', '{"name": "Ann", "age": 30}']
+        )
+        out = generate_model(llm, "extract the person", Person, Person(name="fb", age=1))
+        assert out == Person(name="Ann", age=30)
+        assert llm.calls == 2
+
+        repair = llm.prompts[1]
+        assert "extract the person" in repair          # original prompt retained
+        assert '{"name": "Ann"}' in repair             # bad output fed back
+        assert "Error:" in repair                       # the validation error
+        assert "Required JSON schema:" in repair        # target schema
+
+    def test_repair_prompt_without_previous_on_call_error(self):
+        # When the call itself raises, there's no previous reply to echo, but
+        # the next attempt still proceeds (and here succeeds).
+        llm = FakeLLM(reply='{"name": "Ann", "age": 30}', fail_first=1)
+        out = generate_model(llm, "extract", Person, Person(name="fb", age=1))
+        assert out == Person(name="Ann", age=30)
+        repair = llm.prompts[1]
+        assert "Previous response:" not in repair

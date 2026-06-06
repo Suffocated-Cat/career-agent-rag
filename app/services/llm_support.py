@@ -90,6 +90,25 @@ def extract_json(raw: str) -> Any:
     raise ValueError("no JSON found in model reply")
 
 
+def _repair_prompt(
+    original: str, previous: str | None, error: Exception, model_cls: type[T]
+) -> str:
+    """Build a corrective prompt that feeds the failure back to the model."""
+    parts = [
+        original,
+        "",
+        "Your previous response could not be used.",
+    ]
+    if previous is not None:
+        parts += ["Previous response:", previous]
+    parts += [
+        f"Error: {error}",
+        f"Required JSON schema: {json.dumps(model_cls.model_json_schema())}",
+        "Return ONLY corrected JSON that satisfies the schema.",
+    ]
+    return "\n".join(parts)
+
+
 def generate_model(
     llm: LLMClient,
     prompt: str,
@@ -101,9 +120,11 @@ def generate_model(
     """Return an LLM-produced, schema-validated model, or *fallback*.
 
     The LLM is asked for JSON, which is parsed and validated against
-    *model_cls*. Transient failures (call error, unparseable JSON, validation
-    error) are retried up to *retries* times — LLMs often fix malformed JSON on
-    a second pass — before yielding the deterministic fallback.
+    *model_cls*. On failure, the next attempt is a **corrective retry**: the
+    bad output and the specific error are fed back with the target schema,
+    asking the model to fix it (a plain re-prompt would just reproduce the same
+    failure at low temperature). After *retries* corrective attempts, the
+    deterministic fallback is returned.
 
     Args:
         llm: The LLM client.
@@ -111,8 +132,8 @@ def generate_model(
         model_cls: The Pydantic model to validate into.
         fallback: Deterministic instance returned on any failure.
         system: Optional system prompt.
-        retries: Number of extra attempts after the first (default 1, so up to
-            two attempts total). Use 0 to disable retrying.
+        retries: Number of corrective attempts after the first (default 1, so
+            up to two attempts total). Use 0 to disable retrying.
 
     Returns:
         A validated *model_cls* instance, or *fallback*.
@@ -120,12 +141,14 @@ def generate_model(
     if not llm.is_configured():
         return fallback
 
+    current_prompt = prompt
     for _ in range(retries + 1):
+        raw: str | None = None
         try:
-            raw = llm.complete(prompt, system=system)
+            raw = llm.complete(current_prompt, system=system)
             data = extract_json(raw)
             return model_cls.model_validate(data)
-        except Exception:
-            # Transient: bad JSON / schema / call error — try again, then fall back.
-            continue
+        except Exception as exc:
+            # Feed the bad output + error back so the next attempt can correct it.
+            current_prompt = _repair_prompt(prompt, raw, exc, model_cls)
     return fallback
