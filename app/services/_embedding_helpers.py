@@ -246,12 +246,9 @@ def _discover_semantic_skills(
 
     discovered: set[str] = set()
     for i in range(len(candidates)):
-        best_idx = int(np.argmax(sim_matrix[i]))
-        best_score = float(sim_matrix[i][best_idx])
-        if best_score >= SKILL_DISCOVERY_THRESHOLD:
-            skill = skills_to_check[best_idx]
-            canonical = skill_aliases.get(skill, skill)
-            discovered.add(canonical)
+        for j, skill in enumerate(skills_to_check):
+            if float(sim_matrix[i, j]) >= SKILL_DISCOVERY_THRESHOLD:
+                discovered.add(skill_aliases.get(skill, skill))
 
     return sorted(discovered)
 

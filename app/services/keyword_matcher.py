@@ -116,9 +116,6 @@ def match(
     experience_match_rate: float | None = None
 
     if embedding_service is not None and jd.responsibilities and resume.experience:
-        from app.services.vector_matcher import VectorMatcher
-
-        vm = VectorMatcher(embedding_service)
         vm_exp_matches = vm.match_experiences_to_responsibilities(
             jd.responsibilities, resume.experience
         )
