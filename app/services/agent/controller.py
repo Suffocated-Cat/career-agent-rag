@@ -12,11 +12,20 @@ LLM-backed selector (see ``selectors.py``) can be passed in instead without
 touching the tools or the run loop.
 """
 
+import time
+
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol, runtime_checkable
 
 from app.models.jd import JobDescription
 from app.models.resume import Resume
+from app.services.agent.trace import (
+    STATUS_ERROR,
+    STATUS_NO_TOOL,
+    STATUS_OK,
+    TraceEntry,
+    Tracer,
+)
 
 
 @dataclass
@@ -59,6 +68,7 @@ class ToolResult:
     tool: str
     output: Any
     reason: str = ""  # why this tool was selected
+    latency_ms: float = 0.0  # wall-clock time to select + execute
 
 
 @dataclass
@@ -109,11 +119,13 @@ class AgentController:
         self,
         tools: list[Tool] | None = None,
         selector: ToolSelector | None = None,
+        tracer: Tracer | None = None,
     ):
         self.tools: dict[str, Tool] = {}
         for tool in tools or []:
             self.register(tool)
         self.selector: ToolSelector = selector or KeywordToolSelector()
+        self.tracer = tracer
 
     def register(self, tool: Tool) -> None:
         """Add (or replace) a tool by name."""
@@ -123,28 +135,65 @@ class AgentController:
         """Pick the best-matching tool for *task*, or None if nothing fits."""
         return self.selector.select(task, list(self.tools.values())).tool
 
+    def _trace(self, entry: TraceEntry) -> None:
+        """Record a trace entry if a tracer is attached."""
+        if self.tracer is not None:
+            self.tracer.record(entry)
+
     def run(self, context: AgentContext) -> ToolResult:
         """Select a tool for ``context.task`` and execute it.
+
+        Each call is traced (task, tool, latency, status) when a tracer is
+        attached, including selection misses and tool errors.
 
         Args:
             context: The task plus any data tools may need.
 
         Returns:
-            A ToolResult with the tool name, its output, and the selection
-            reason.
+            A ToolResult with the tool name, its output, the selection reason,
+            and the elapsed time in milliseconds.
 
         Raises:
             LookupError: If no tool is selected for the task.
         """
+        start = time.perf_counter()
         selection = self.selector.select(context.task, list(self.tools.values()))
+
         if selection.tool is None:
+            latency_ms = (time.perf_counter() - start) * 1000
+            self._trace(
+                TraceEntry(
+                    task=context.task, tool=None, status=STATUS_NO_TOOL,
+                    latency_ms=latency_ms, reason=selection.reason,
+                )
+            )
             raise LookupError(f"No tool matched task: {context.task!r}")
 
-        output = selection.tool.handler(context)
+        try:
+            output = selection.tool.handler(context)
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start) * 1000
+            self._trace(
+                TraceEntry(
+                    task=context.task, tool=selection.tool.name, status=STATUS_ERROR,
+                    latency_ms=latency_ms, reason=selection.reason, error=str(exc),
+                )
+            )
+            raise
+
+        latency_ms = (time.perf_counter() - start) * 1000
+        self._trace(
+            TraceEntry(
+                task=context.task, tool=selection.tool.name, status=STATUS_OK,
+                latency_ms=latency_ms, reason=selection.reason,
+                output_type=type(output).__name__,
+            )
+        )
         return ToolResult(
             tool=selection.tool.name,
             output=output,
             reason=selection.reason,
+            latency_ms=latency_ms,
         )
 
     def describe_tools(self) -> list[dict[str, str]]:

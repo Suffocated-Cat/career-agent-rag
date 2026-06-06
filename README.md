@@ -54,7 +54,8 @@ career-agent-rag/
 │   │   ├── agent/               # Multi-tool agent
 │   │   │   ├── controller.py      # AgentController + KeywordToolSelector
 │   │   │   ├── selectors.py       # LLMToolSelector (LLM-based routing)
-│   │   │   └── tools.py           # Default tools wrapping the services
+│   │   │   ├── tools.py           # Default tools wrapping the services
+│   │   │   └── trace.py           # Tracer + TraceEntry (tool-call audit trail)
 │   │   └── retrieval/            # Retrieval backends (shared interface)
 │   │       ├── base.py             # Retriever protocol, tokenizer, corpus builder
 │   │       ├── bm25_retriever.py   # BM25Retriever (Okapi BM25, lexical recall)
@@ -107,7 +108,8 @@ career-agent-rag/
 │       ├── agent/
 │       │   ├── test_controller.py
 │       │   ├── test_tools.py
-│       │   └── test_selectors.py
+│       │   ├── test_selectors.py
+│       │   └── test_trace.py
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
 │           ├── test_vector_retriever.py
@@ -195,6 +197,8 @@ Selection is pluggable via the `ToolSelector` protocol:
 
 - **`KeywordToolSelector`** (default) — scores tools by keyword overlap; transparent and offline.
 - **`LLMToolSelector`** — sends the task and tool descriptions to an LLM and asks it to name the best tool (strict JSON). It degrades gracefully: if the LLM is unconfigured, errors, or returns an unknown name, it falls back to the keyword selector, so the agent never hard-fails on the model.
+
+Pass a `Tracer` to the controller to record every run as a `TraceEntry` — task, selected tool, selection reason, latency, and status (`ok` / `error` / `no_tool`, with the error message on failures). `ToolResult` also carries `latency_ms`. This is the audit trail for debugging wrong tool selection and tool failures (`tracer.as_dicts()` serializes it for logs or an API).
 
 `LLMClient` (`llm_client.py`) is a thin wrapper over any **OpenAI-compatible** chat endpoint, reading `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` from settings. The SDK client is created lazily and can be injected for testing.
 
