@@ -16,7 +16,9 @@ exposes ``search(query, k) -> list[RetrievalResult]``.
 from app.services.retrieval.base import (
     Retriever,
     RetrievalResult,
+    RetrievalDocument,
     corpus_from_resume,
+    document_texts,
 )
 from app.services.retrieval.bm25_retriever import BM25Retriever
 from app.services.retrieval.vector_retriever import VectorRetriever
@@ -26,7 +28,9 @@ from app.services.retrieval.reranker import Reranker, RerankingRetriever
 __all__ = [
     "Retriever",
     "RetrievalResult",
+    "RetrievalDocument",
     "corpus_from_resume",
+    "document_texts",
     "BM25Retriever",
     "VectorRetriever",
     "HybridRetriever",

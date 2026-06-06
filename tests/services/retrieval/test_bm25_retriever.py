@@ -2,8 +2,10 @@
 import math
 
 from app.services.retrieval.base import (
+    RetrievalDocument,
     RetrievalResult,
     corpus_from_resume,
+    document_texts,
     tokenize,
 )
 from app.services.retrieval.bm25_retriever import BM25Retriever
@@ -129,8 +131,8 @@ class TestBM25Retriever:
 class TestCorpusFromResume:
     """Tests for building a corpus from a parsed resume."""
 
-    def test_experiences_and_projects_become_docs(self):
-        resume = Resume(
+    def _resume(self):
+        return Resume(
             raw_text="...",
             experience=[
                 ResumeExperience(
@@ -147,14 +149,62 @@ class TestCorpusFromResume:
                 )
             ],
         )
-        corpus = corpus_from_resume(resume)
+
+    def test_experiences_and_projects_become_documents(self):
+        corpus = corpus_from_resume(self._resume())
         assert len(corpus) == 2
-        assert any("ML Engineer" in doc for doc in corpus)
-        assert any("Chatbot" in doc and "FAISS" in doc for doc in corpus)
+        assert all(isinstance(doc, RetrievalDocument) for doc in corpus)
+        assert any("ML Engineer" in doc.text for doc in corpus)
+        assert any("Chatbot" in doc.text and "FAISS" in doc.text for doc in corpus)
+
+    def test_documents_carry_provenance(self):
+        corpus = corpus_from_resume(self._resume())
+        exp_doc = next(d for d in corpus if d.source_type == "experience")
+        proj_doc = next(d for d in corpus if d.source_type == "project")
+
+        assert exp_doc.id == "exp:0"
+        assert exp_doc.source_index == 0
+        assert exp_doc.metadata == {"title": "ML Engineer", "company": "Acme"}
+
+        assert proj_doc.id == "proj:0"
+        assert proj_doc.metadata["name"] == "Chatbot"
+        assert proj_doc.metadata["technologies"] == ["Python", "FAISS"]
+
+    def test_ids_track_original_index_when_items_skipped(self):
+        # First experience has no usable text and is skipped, but the second
+        # keeps its original index in its id.
+        resume = Resume(
+            raw_text="...",
+            experience=[
+                ResumeExperience(title="", company="", highlights=[]),
+                ResumeExperience(title="Backend Engineer", company="Beta"),
+            ],
+        )
+        corpus = corpus_from_resume(resume)
+        assert len(corpus) == 1
+        assert corpus[0].id == "exp:1"
+        assert corpus[0].source_index == 1
 
     def test_empty_resume(self):
         resume = Resume(raw_text="nothing structured")
         assert corpus_from_resume(resume) == []
+
+    def test_empty_project_is_skipped(self):
+        resume = Resume(
+            raw_text="...",
+            projects=[
+                ResumeProject(name="", description="", technologies=[]),
+                ResumeProject(name="Real Project", description="Does things"),
+            ],
+        )
+        corpus = corpus_from_resume(resume)
+        assert len(corpus) == 1
+        assert corpus[0].id == "proj:1"
+
+    def test_document_texts_is_index_aligned(self):
+        corpus = corpus_from_resume(self._resume())
+        texts = document_texts(corpus)
+        assert texts == [doc.text for doc in corpus]
 
     def test_searchable_via_bm25(self):
         resume = Resume(
@@ -167,7 +217,9 @@ class TestCorpusFromResume:
                 )
             ],
         )
-        r = BM25Retriever(corpus_from_resume(resume))
+        docs = corpus_from_resume(resume)
+        r = BM25Retriever(document_texts(docs))
         results = r.search("qdrant semantic search", k=1)
         assert len(results) == 1
-        assert "Vector Search" in results[0].text
+        # doc_id maps back to the source document.
+        assert docs[results[0].doc_id].metadata["name"] == "Vector Search"
