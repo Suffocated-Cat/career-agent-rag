@@ -1,0 +1,170 @@
+[
+  {
+    "query_id": "q_agent_tool_calling_trace",
+    "job_id": "job_agent_platform",
+    "query": "Build LLM agents with tool calling and execution trace logging",
+    "relevance": {
+      "strong_agent:exp:0": 3,
+      "strong_agent:proj:1": 3,
+      "strong_agent:proj:0": 2,
+      "vague_claims:proj:0": 1,
+      "partial_rag:proj:0": 1,
+      "backend_only:proj:0": 0,
+      "cv_only:proj:0": 0
+    }
+  },
+  {
+    "query_id": "q_agent_fastapi_backend",
+    "job_id": "job_agent_platform",
+    "query": "Develop FastAPI backend services for agent workflows and structured outputs",
+    "relevance": {
+      "strong_agent:exp:0": 3,
+      "strong_agent:exp:1": 2,
+      "strong_agent:proj:0": 2,
+      "backend_only:exp:0": 2,
+      "backend_only:proj:0": 2,
+      "vague_claims:skills:0": 1,
+      "cv_only:exp:0": 0
+    }
+  },
+  {
+    "query_id": "q_hybrid_retrieval_rag",
+    "job_id": "job_rag_engineer",
+    "query": "Design BM25 and embedding hybrid retrieval for RAG evidence grounding",
+    "relevance": {
+      "strong_agent:proj:0": 3,
+      "strong_agent:skills:0": 2,
+      "partial_rag:proj:0": 2,
+      "partial_rag:exp:0": 2,
+      "partial_rag:skills:0": 1,
+      "vague_claims:proj:0": 1,
+      "backend_only:proj:1": 0
+    }
+  },
+  {
+    "query_id": "q_retrieval_eval_metrics",
+    "job_id": "job_rag_engineer",
+    "query": "Evaluate retrieval quality using Recall at k MRR and nDCG metrics",
+    "relevance": {
+      "strong_agent:proj:0": 3,
+      "strong_agent:skills:0": 2,
+      "partial_rag:exp:1": 1,
+      "partial_rag:proj:1": 1,
+      "backend_only:skills:0": 0,
+      "cv_only:skills:0": 0,
+      "vague_claims:proj:0": 0
+    }
+  },
+  {
+    "query_id": "q_vector_database_embeddings",
+    "job_id": "job_rag_engineer",
+    "query": "Implement vector similarity search with sentence transformer embeddings",
+    "relevance": {
+      "partial_rag:exp:0": 3,
+      "partial_rag:proj:0": 3,
+      "partial_rag:skills:0": 2,
+      "strong_agent:proj:0": 2,
+      "strong_agent:skills:0": 1,
+      "vague_claims:skills:0": 1,
+      "backend_only:exp:1": 0
+    }
+  },
+  {
+    "query_id": "q_ai_backend_docker_tests",
+    "job_id": "job_ai_backend",
+    "query": "Build Dockerized FastAPI services with request validation and automated tests",
+    "relevance": {
+      "backend_only:exp:0": 3,
+      "backend_only:proj:0": 3,
+      "backend_only:skills:0": 2,
+      "strong_agent:exp:0": 2,
+      "strong_agent:exp:1": 2,
+      "strong_agent:proj:0": 1,
+      "cv_only:exp:1": 0
+    }
+  },
+  {
+    "query_id": "q_llm_api_integration_fallback",
+    "job_id": "job_ai_backend",
+    "query": "Integrate LLM APIs into product features with validation and fallback behavior",
+    "relevance": {
+      "strong_agent:exp:1": 3,
+      "strong_agent:exp:0": 2,
+      "strong_agent:proj:0": 2,
+      "vague_claims:exp:0": 1,
+      "vague_claims:skills:0": 1,
+      "backend_only:exp:0": 0,
+      "cv_only:proj:1": 0
+    }
+  },
+  {
+    "query_id": "q_learning_plan_interview_questions",
+    "job_id": "job_llm_app",
+    "query": "Generate personalized learning plans and technical interview questions from job descriptions",
+    "relevance": {
+      "strong_agent:proj:0": 3,
+      "strong_agent:skills:0": 2,
+      "partial_rag:proj:1": 1,
+      "strong_agent:exp:1": 1,
+      "vague_claims:proj:0": 1,
+      "backend_only:proj:0": 0,
+      "cv_only:proj:0": 0
+    }
+  },
+  {
+    "query_id": "q_project_risk_audit",
+    "job_id": "job_llm_app",
+    "query": "Detect vague AI project claims that mention RAG and agents without supporting evidence",
+    "relevance": {
+      "vague_claims:proj:0": 3,
+      "vague_claims:skills:0": 3,
+      "vague_claims:exp:0": 2,
+      "strong_agent:proj:0": 1,
+      "partial_rag:proj:0": 1,
+      "backend_only:proj:1": 0,
+      "cv_only:skills:0": 0
+    }
+  },
+  {
+    "query_id": "q_computer_vision_segmentation",
+    "job_id": "job_ai_backend",
+    "query": "Computer vision semantic segmentation with PyTorch OpenCV U-Net and Mask R-CNN",
+    "relevance": {
+      "cv_only:exp:0": 3,
+      "cv_only:proj:0": 3,
+      "cv_only:proj:1": 3,
+      "cv_only:skills:0": 2,
+      "partial_rag:exp:1": 0,
+      "backend_only:proj:0": 0,
+      "strong_agent:proj:1": 0
+    }
+  },
+  {
+    "query_id": "q_robotics_ros_navigation",
+    "job_id": "job_ai_backend",
+    "query": "ROS2 robotics navigation with OpenCV LiDAR mapping localization and waypoint control",
+    "relevance": {
+      "cv_only:exp:1": 3,
+      "cv_only:skills:0": 2,
+      "cv_only:proj:1": 1,
+      "backend_only:exp:1": 0,
+      "strong_agent:exp:0": 0,
+      "partial_rag:proj:0": 0,
+      "vague_claims:proj:1": 0
+    }
+  },
+  {
+    "query_id": "q_keyword_vs_semantic_paraphrase",
+    "job_id": "job_rag_engineer",
+    "query": "Find experience grounding answers in source snippets even when exact RAG keyword is missing",
+    "relevance": {
+      "partial_rag:proj:0": 3,
+      "partial_rag:exp:0": 2,
+      "strong_agent:proj:0": 2,
+      "partial_rag:proj:1": 1,
+      "vague_claims:proj:0": 1,
+      "backend_only:skills:0": 0,
+      "cv_only:proj:0": 0
+    }
+  }
+]

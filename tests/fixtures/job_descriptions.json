@@ -1,0 +1,94 @@
+[
+  {
+    "raw_text": "AI Agent Platform Engineer\n\nat Northstar AI\n\nResponsibilities:\n- Build LLM agents that select tools, call retrieval systems, and record execution traces.\n- Develop FastAPI services for agent workflows, structured outputs, and evaluation dashboards.\n- Improve reliability of generated reports through evidence grounding and automated tests.\n\nRequirements:\n- Experience with Python backend development and REST APIs.\n- Hands-on experience with LLM APIs, tool calling, RAG, and embeddings.\n- Familiarity with Docker, testing, observability, and production debugging.\n\nNice to have:\n- MCP tool integration experience.\n- Knowledge of retrieval evaluation metrics such as Recall@k, MRR, and nDCG.\n\nSkills:\n- python, fastapi, llm, tool calling, rag, docker, pytest",
+    "title": "AI Agent Platform Engineer",
+    "company": "Northstar AI",
+    "skills": [
+      "python",
+      "fastapi",
+      "llm",
+      "tool calling",
+      "rag",
+      "docker",
+      "pytest"
+    ],
+    "responsibilities": [
+      "Build LLM agents that select tools, call retrieval systems, and record execution traces.",
+      "Develop FastAPI services for agent workflows, structured outputs, and evaluation dashboards.",
+      "Improve reliability of generated reports through evidence grounding and automated tests."
+    ],
+    "nice_to_haves": [
+      "MCP tool integration experience.",
+      "Knowledge of retrieval evaluation metrics such as Recall@k, MRR, and nDCG."
+    ]
+  },
+  {
+    "raw_text": "RAG Engineer\n\nat VectorWorks\n\nResponsibilities:\n- Design hybrid retrieval pipelines that combine lexical and semantic search.\n- Evaluate retrieval quality with labeled datasets and ranking metrics.\n- Build evidence-grounded answer generation workflows for enterprise documents.\n\nRequirements:\n- Experience implementing retrieval, ranking, or recommendation systems.\n- Understanding of BM25, embeddings, vector similarity, and reranking.\n- Ability to design small evaluation sets and analyze retrieval failures.\n\nNice to have:\n- Experience with FAISS, Chroma, Qdrant, or similar vector stores.\n- Experience with cross-encoder rerankers.\n\nSkills:\n- python, bm25, embedding, hybrid search, reranker, vector database, rag evaluation",
+    "title": "RAG Engineer",
+    "company": "VectorWorks",
+    "skills": [
+      "python",
+      "bm25",
+      "embedding",
+      "hybrid search",
+      "reranker",
+      "vector database",
+      "rag evaluation"
+    ],
+    "responsibilities": [
+      "Design hybrid retrieval pipelines that combine lexical and semantic search.",
+      "Evaluate retrieval quality with labeled datasets and ranking metrics.",
+      "Build evidence-grounded answer generation workflows for enterprise documents."
+    ],
+    "nice_to_haves": [
+      "Experience with FAISS, Chroma, Qdrant, or similar vector stores.",
+      "Experience with cross-encoder rerankers."
+    ]
+  },
+  {
+    "raw_text": "AI Backend Engineer\n\nat Prism Health\n\nResponsibilities:\n- Build backend APIs for AI-powered user workflows and asynchronous data processing.\n- Integrate LLM services into reliable product features with validation and fallbacks.\n- Own Dockerized development, automated testing, and API documentation.\n\nRequirements:\n- Strong Python and FastAPI experience.\n- Experience building tested services and integrating external APIs.\n- Ability to debug data flow across frontend, backend, and model calls.\n\nNice to have:\n- Experience with personalized recommendation or coaching systems.\n- Familiarity with prompt engineering and structured LLM outputs.\n\nSkills:\n- python, fastapi, postgresql, docker, api design, testing, llm integration",
+    "title": "AI Backend Engineer",
+    "company": "Prism Health",
+    "skills": [
+      "python",
+      "fastapi",
+      "postgresql",
+      "docker",
+      "api design",
+      "testing",
+      "llm integration"
+    ],
+    "responsibilities": [
+      "Build backend APIs for AI-powered user workflows and asynchronous data processing.",
+      "Integrate LLM services into reliable product features with validation and fallbacks.",
+      "Own Dockerized development, automated testing, and API documentation."
+    ],
+    "nice_to_haves": [
+      "Experience with personalized recommendation or coaching systems.",
+      "Familiarity with prompt engineering and structured LLM outputs."
+    ]
+  },
+  {
+    "raw_text": "LLM Application Engineer\n\nat InterviewLoop\n\nResponsibilities:\n- Build LLM applications that generate personalized preparation plans and interview questions.\n- Ground model output in user profiles, job descriptions, and retrieved evidence.\n- Evaluate answer quality, hallucination risk, and user-facing usefulness.\n\nRequirements:\n- Experience turning structured data and retrieved context into useful LLM outputs.\n- Familiarity with RAG, prompt design, JSON outputs, and evaluation workflows.\n- Ability to iterate quickly on product-facing AI features.\n\nNice to have:\n- Experience with career, education, or coaching products.\n- Experience with agent workflows or multi-step planning.\n\nSkills:\n- llm, prompt engineering, rag, learning plan, interview questions, structured output, evaluation",
+    "title": "LLM Application Engineer",
+    "company": "InterviewLoop",
+    "skills": [
+      "llm",
+      "prompt engineering",
+      "rag",
+      "learning plan",
+      "interview questions",
+      "structured output",
+      "evaluation"
+    ],
+    "responsibilities": [
+      "Build LLM applications that generate personalized preparation plans and interview questions.",
+      "Ground model output in user profiles, job descriptions, and retrieved evidence.",
+      "Evaluate answer quality, hallucination risk, and user-facing usefulness."
+    ],
+    "nice_to_haves": [
+      "Experience with career, education, or coaching products.",
+      "Experience with agent workflows or multi-step planning."
+    ]
+  }
+]

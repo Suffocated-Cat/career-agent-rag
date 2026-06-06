@@ -46,12 +46,18 @@ career-agent-rag/
 │   │   ├── keyword_matcher.py    # KeywordMatcher (keyword + vector)
 │   │   ├── vector_matcher.py     # VectorMatcher (semantic match)
 │   │   ├── report_generator.py   # ReportGenerator (template-based report)
+│   │   ├── match_pipeline.py     # Rank resume items vs JD via retrieval
 │   │   └── retrieval/            # Retrieval backends (shared interface)
 │   │       ├── base.py             # Retriever protocol, tokenizer, corpus builder
 │   │       ├── bm25_retriever.py   # BM25Retriever (Okapi BM25, lexical recall)
 │   │       ├── vector_retriever.py # VectorRetriever (embedding, semantic recall)
 │   │       ├── hybrid_retriever.py # HybridRetriever (RRF / weighted fusion)
-│   │       └── reranker.py         # Reranker + RerankingRetriever (cross-encoder)
+│   │       ├── reranker.py         # Reranker + RerankingRetriever (cross-encoder)
+│   │       └── factory.py          # build_retriever(method, ...) ablation switch
+│   ├── eval/                  # Retrieval evaluation harness
+│   │   ├── metrics.py           # recall@k, MRR, nDCG@k
+│   │   ├── datasets.py          # fixture loaders (corpus + labeled queries)
+│   │   └── runner.py            # evaluate_retriever() → EvalReport
 │   ├── core/
 │       └── config.py        # pydantic-settings configuration
 │   └── Dockerfile               # Backend Docker image
@@ -63,17 +69,28 @@ career-agent-rag/
 │   │       ├── test_jd.py
 │   │       ├── test_resume.py
 │   │       └── test_match.py
+│   ├── fixtures/            # Evaluation dataset
+│   │   ├── retrieval_documents.json # Pooled resume corpus (with stable ids)
+│   │   ├── relevance_queries.json   # Queries + graded relevance labels
+│   │   ├── sample_jobs.json         # Eval jobs (job_id link + requirements)
+│   │   └── job_descriptions.json    # Same jobs in JobDescription model shape
+│   ├── eval/
+│   │   ├── test_metrics.py          # recall@k, MRR, nDCG@k
+│   │   ├── test_datasets.py         # fixture loaders
+│   │   └── test_runner.py           # evaluate_retriever over fixtures
 │   └── services/
 │       ├── test_jd_parser.py
 │       ├── test_resume_parser.py
 │       ├── test_keyword_matcher.py
 │       ├── test_vector_matcher.py
 │       ├── test_report_generator.py
+│       ├── test_match_pipeline.py
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
 │           ├── test_vector_retriever.py
 │           ├── test_hybrid_retriever.py
-│           └── test_reranker.py
+│           ├── test_reranker.py
+│           └── test_factory.py
 ├── frontend/                # Reserved for future frontend
 ├── experiments/             # Standalone experiment scripts
 │   ├── day1_embedding_demo.py
@@ -126,6 +143,22 @@ The `app/services/retrieval/` package treats the resume (its experiences and pro
 - **Reranker / RerankingRetriever** — a cross-encoder re-scoring stage. The bi-encoder retrievers above score query and document independently (cheap, coarse); the cross-encoder feeds the (query, document) pair through the model together (accurate, expensive), so it re-ranks only a small candidate pool: *recall top ~20 → cross-encoder rescore → top-k*. `RerankingRetriever` wraps any base retriever behind the same `search(query, k)` interface. The model loads lazily on first use and can be injected for testing.
 
 `corpus_from_resume(resume)` builds a list of `RetrievalDocument`s (one per experience and project), each carrying a stable id (`exp:0`, `proj:1`), source type/index, and display metadata for provenance. Retrievers consume plain text via `document_texts(docs)` and identify hits by integer index, so a result's `doc_id` maps straight back to `docs[doc_id]` for reporting and evaluation. A tech-aware tokenizer preserves tokens like `c++`, `c#`, and `node.js`.
+
+`build_retriever(method, corpus, ...)` constructs any backend by name — `"bm25"`, `"vector"`, `"hybrid"`, `"hybrid+rerank"` — which is the switch used for ablations.
+
+## Project Relevance
+
+`match_pipeline.rank_resume_projects(jd, resume, ...)` scores each resume experience/project by retrieval relevance to a JD-derived query (skills + responsibilities). It returns `ProjectRelevance` entries — stable `doc_id`, human-readable `label`, the raw retriever `score`, and a min-max `normalized_score` (best = 1.0) — attributed back to the source item via provenance. The `method` argument selects the retrieval backend, so the same call powers ablation comparisons.
+
+## Evaluation
+
+`app/eval/` measures retrieval quality on a labeled dataset:
+
+- **metrics.py** — `recall_at_k` (was the right doc recalled?), `mrr` (how high is the first hit?), `ndcg_at_k` (graded ranking quality, the one that judges reranking).
+- **datasets.py** — loads the fixtures in `tests/fixtures/`: a pooled corpus of resume documents (`retrieval_documents.json`) and queries with graded relevance labels (`relevance_queries.json`). Pooling several resumes into one index gives realistic distractors, which is what makes the metrics meaningful.
+- **runner.py** — `evaluate_retriever(retriever, documents, queries, k)` runs each query, maps results back to stable ids, and returns mean recall@k / MRR / nDCG@k in an `EvalReport`.
+
+Swapping the retrieval method through `build_retriever` and re-running the harness is the basis for the Week-4 ablations.
 
 ## Development (Docker)
 

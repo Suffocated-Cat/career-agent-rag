@@ -20,6 +20,16 @@ class ExperienceMatchDetail(BaseModel):
     similarity: float = Field(ge=0.0, le=1.0)
 
 
+class ProjectRelevance(BaseModel):
+    """Relevance of a single resume experience/project to the JD query."""
+
+    doc_id: str  # stable id from RetrievalDocument, e.g. "exp:0" / "proj:1"
+    source_type: str  # "experience" | "project"
+    label: str  # human-readable, e.g. "ML Engineer at Acme"
+    score: float  # raw retriever score (scale depends on method)
+    normalized_score: float = Field(ge=0.0, le=1.0)  # min-max within results
+
+
 class MatchResult(BaseModel):
     """Represents a JD-to-resume match analysis."""
 
@@ -35,6 +45,9 @@ class MatchResult(BaseModel):
     semantic_skill_match_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     experience_matches: list[ExperienceMatchDetail] = Field(default_factory=list)
     experience_match_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    # ── Retrieval-based project relevance ───────────────────────────────
+    project_relevance: list[ProjectRelevance] = Field(default_factory=list)
 
 
 class MatchRequest(BaseModel):

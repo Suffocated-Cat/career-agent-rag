@@ -1,0 +1,282 @@
+[
+  {
+    "id": "strong_agent:exp:0",
+    "text": "AI Platform Intern at Northstar Labs. Built FastAPI services for LLM agent workflows, including tool selection, structured JSON outputs, and execution trace logging. Added pytest coverage for parser, matcher, and report generation modules.",
+    "source_type": "experience",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "strong_agent",
+      "title": "AI Platform Intern",
+      "company": "Northstar Labs",
+      "skills": ["python", "fastapi", "llm", "tool calling", "trace", "pytest"]
+    }
+  },
+  {
+    "id": "strong_agent:exp:1",
+    "text": "Backend Developer at FitFlow. Integrated OpenAI API into a coaching platform, validated structured model responses, and implemented fallback template generation when model calls failed. Dockerized the backend development environment.",
+    "source_type": "experience",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "strong_agent",
+      "title": "Backend Developer",
+      "company": "FitFlow",
+      "skills": ["openai api", "structured output", "docker", "fallback"]
+    }
+  },
+  {
+    "id": "strong_agent:proj:0",
+    "text": "CareerAgent project. Built an Agentic RAG backend for technical job matching with JD parsing, resume parsing, BM25 retrieval, embedding vector search, Reciprocal Rank Fusion, optional reranking, skill gap analysis, risk auditing, and Markdown report generation.",
+    "source_type": "project",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "strong_agent",
+      "name": "CareerAgent",
+      "technologies": ["python", "fastapi", "bm25", "embedding", "hybrid search", "rag", "docker", "pytest"]
+    }
+  },
+  {
+    "id": "strong_agent:proj:1",
+    "text": "Agent Tool Trace Demo. Implemented a controller that routes user requests to parser, retriever, project auditor, and plan generator tools. Stored each tool call with input, output, latency, and error status for debugging.",
+    "source_type": "project",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "strong_agent",
+      "name": "Agent Tool Trace Demo",
+      "technologies": ["agent controller", "tool calling", "trace", "python"]
+    }
+  },
+  {
+    "id": "strong_agent:skills:0",
+    "text": "Skills summary: Python, FastAPI, Pydantic, Docker, Pytest, OpenAI API, embeddings, BM25, hybrid search, RAG, tool calling, structured outputs, retrieval evaluation.",
+    "source_type": "skills",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "strong_agent",
+      "skills": ["python", "fastapi", "pydantic", "docker", "pytest", "rag", "tool calling", "evaluation"]
+    }
+  },
+  {
+    "id": "partial_rag:exp:0",
+    "text": "Machine Learning Engineer Intern at DocSearch. Built a document question answering prototype using embeddings, chunking, vector similarity search, and answer generation over policy documents. Focused on retrieval quality and prompt formatting.",
+    "source_type": "experience",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "partial_rag",
+      "title": "Machine Learning Engineer Intern",
+      "company": "DocSearch",
+      "skills": ["embedding", "vector search", "rag", "prompt engineering"]
+    }
+  },
+  {
+    "id": "partial_rag:exp:1",
+    "text": "Data Science Assistant at Campus Analytics. Cleaned student support data with pandas, trained scikit-learn classifiers, and created dashboards for error analysis and performance reporting.",
+    "source_type": "experience",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "partial_rag",
+      "title": "Data Science Assistant",
+      "company": "Campus Analytics",
+      "skills": ["pandas", "scikit-learn", "error analysis"]
+    }
+  },
+  {
+    "id": "partial_rag:proj:0",
+    "text": "Policy QA RAG project. Implemented chunking, sentence-transformer embeddings, vector retrieval, and citation-style evidence snippets for a question answering demo. Did not include autonomous tool selection or MCP tools.",
+    "source_type": "project",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "partial_rag",
+      "name": "Policy QA RAG",
+      "technologies": ["sentence-transformers", "vector retrieval", "rag", "citations"]
+    }
+  },
+  {
+    "id": "partial_rag:proj:1",
+    "text": "Resume Matcher baseline. Compared job description skills with resume skills using keyword extraction and cosine similarity. Generated a simple skill gap report without retrieval evaluation metrics.",
+    "source_type": "project",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "partial_rag",
+      "name": "Resume Matcher Baseline",
+      "technologies": ["python", "cosine similarity", "skill extraction"]
+    }
+  },
+  {
+    "id": "partial_rag:skills:0",
+    "text": "Skills summary: Python, pandas, scikit-learn, sentence-transformers, embeddings, vector retrieval, prompt engineering, data visualization.",
+    "source_type": "skills",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "partial_rag",
+      "skills": ["python", "pandas", "embedding", "vector retrieval", "prompt engineering"]
+    }
+  },
+  {
+    "id": "backend_only:exp:0",
+    "text": "Backend Engineer Intern at ShopGrid. Built FastAPI endpoints for product search, user profiles, and order processing. Added PostgreSQL schemas, request validation, API documentation, Docker Compose setup, and integration tests.",
+    "source_type": "experience",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "backend_only",
+      "title": "Backend Engineer Intern",
+      "company": "ShopGrid",
+      "skills": ["fastapi", "postgresql", "docker", "integration tests"]
+    }
+  },
+  {
+    "id": "backend_only:exp:1",
+    "text": "Software Developer at University Lab. Implemented authentication middleware, background jobs, logging, and REST API error handling for an internal scheduling system.",
+    "source_type": "experience",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "backend_only",
+      "title": "Software Developer",
+      "company": "University Lab",
+      "skills": ["rest api", "auth", "logging", "background jobs"]
+    }
+  },
+  {
+    "id": "backend_only:proj:0",
+    "text": "Fitness Tracking API. Developed a FastAPI backend for workouts, user profiles, and progress analytics. Used Docker, PostgreSQL, Pydantic validation, and pytest for service tests.",
+    "source_type": "project",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "backend_only",
+      "name": "Fitness Tracking API",
+      "technologies": ["fastapi", "docker", "postgresql", "pytest", "pydantic"]
+    }
+  },
+  {
+    "id": "backend_only:proj:1",
+    "text": "Inventory Management Service. Designed CRUD APIs, pagination, role-based access control, and database migrations. No LLM, retrieval, or agent workflow was implemented.",
+    "source_type": "project",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "backend_only",
+      "name": "Inventory Management Service",
+      "technologies": ["fastapi", "postgresql", "rbac", "migrations"]
+    }
+  },
+  {
+    "id": "backend_only:skills:0",
+    "text": "Skills summary: Python, FastAPI, PostgreSQL, Docker, REST API design, Pydantic, pytest, GitHub Actions, logging, backend debugging.",
+    "source_type": "skills",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "backend_only",
+      "skills": ["python", "fastapi", "postgresql", "docker", "pytest", "api design"]
+    }
+  },
+  {
+    "id": "cv_only:exp:0",
+    "text": "Computer Vision Research Assistant. Trained semantic segmentation models on remote sensing imagery using U-Net and ResNet encoders. Evaluated IoU distributions and visualized segmentation masks.",
+    "source_type": "experience",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "cv_only",
+      "title": "Computer Vision Research Assistant",
+      "company": "Remote Sensing Lab",
+      "skills": ["pytorch", "unet", "resnet", "semantic segmentation"]
+    }
+  },
+  {
+    "id": "cv_only:exp:1",
+    "text": "Robotics Project Developer. Built TurtleBot3 perception and navigation workflows with ROS2, OpenCV, LiDAR processing, mapping, localization, and waypoint navigation.",
+    "source_type": "experience",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "cv_only",
+      "title": "Robotics Project Developer",
+      "company": "UNSW",
+      "skills": ["ros2", "opencv", "lidar", "navigation"]
+    }
+  },
+  {
+    "id": "cv_only:proj:0",
+    "text": "Traffic Sign Mask R-CNN project. Implemented object detection and instance segmentation for traffic signs using PyTorch, OpenCV, Mask R-CNN, NumPy, pandas, and matplotlib.",
+    "source_type": "project",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "cv_only",
+      "name": "Traffic Sign Mask R-CNN",
+      "technologies": ["pytorch", "opencv", "mask r-cnn", "numpy", "pandas"]
+    }
+  },
+  {
+    "id": "cv_only:proj:1",
+    "text": "Dead Tree Segmentation System. Built an improved U-Net model with RGB and NIR inputs for satellite imagery segmentation. Used BCE and Dice loss and analyzed mIoU results.",
+    "source_type": "project",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "cv_only",
+      "name": "Dead Tree Segmentation System",
+      "technologies": ["pytorch", "unet", "resnet-50", "opencv", "remote sensing"]
+    }
+  },
+  {
+    "id": "cv_only:skills:0",
+    "text": "Skills summary: Python, PyTorch, TensorFlow, OpenCV, Mask R-CNN, U-Net, ResNet, ROS2, LiDAR, computer vision, image segmentation.",
+    "source_type": "skills",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "cv_only",
+      "skills": ["python", "pytorch", "opencv", "mask r-cnn", "ros2", "computer vision"]
+    }
+  },
+  {
+    "id": "vague_claims:exp:0",
+    "text": "AI Developer Intern at BrightApps. Worked on several AI features and helped improve user experience. Participated in meetings about LLM strategy and wrote small Python scripts for data cleanup.",
+    "source_type": "experience",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "vague_claims",
+      "title": "AI Developer Intern",
+      "company": "BrightApps",
+      "skills": ["python", "ai features"]
+    }
+  },
+  {
+    "id": "vague_claims:exp:1",
+    "text": "Junior Web Developer at Local Studio. Built React pages, connected forms to backend APIs, fixed CSS issues, and collaborated with designers on user interface improvements.",
+    "source_type": "experience",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "vague_claims",
+      "title": "Junior Web Developer",
+      "company": "Local Studio",
+      "skills": ["react", "api integration", "css"]
+    }
+  },
+  {
+    "id": "vague_claims:proj:0",
+    "text": "LLM Assistant concept. Claimed to use RAG, agents, MCP, and vector databases, but project notes only describe a chat UI mockup and generic prompt examples. No retrieval code, tool execution, or evaluation is documented.",
+    "source_type": "project",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "vague_claims",
+      "name": "LLM Assistant Concept",
+      "technologies": ["llm", "rag", "agent", "mcp"]
+    }
+  },
+  {
+    "id": "vague_claims:proj:1",
+    "text": "Portfolio Website. Created a personal portfolio using React and Vite with project cards, responsive styling, and contact form validation.",
+    "source_type": "project",
+    "source_index": 1,
+    "metadata": {
+      "resume_id": "vague_claims",
+      "name": "Portfolio Website",
+      "technologies": ["react", "vite", "css"]
+    }
+  },
+  {
+    "id": "vague_claims:skills:0",
+    "text": "Skills summary: Python, React, LLM, RAG, agents, MCP, vector databases, prompt engineering, FastAPI. Several advanced AI skills are listed without detailed supporting project evidence.",
+    "source_type": "skills",
+    "source_index": 0,
+    "metadata": {
+      "resume_id": "vague_claims",
+      "skills": ["python", "react", "llm", "rag", "agent", "mcp", "fastapi"]
+    }
+  }
+]
