@@ -16,6 +16,34 @@ Scores, rankings, and risk findings are computed deterministically; an LLM (if
 configured) adds field extraction, risk advice, and a natural-language report,
 always with a deterministic fallback.
 
+## Required inputs
+
+- Job description: text or a file path.
+- Resume: text or a file path.
+
+Both are required. If only one is available, ask for the other before running —
+do not run the skill with a single input.
+
+## When not to use
+
+Do not use this skill when the user only wants to:
+
+- parse a JD (use `POST /api/v1/jd/parse` or the `parse_jd` MCP tool),
+- parse a resume (use `POST /api/v1/resume/parse` or `parse_resume`),
+- audit a resume on its own (use `POST /api/v1/audit` or `audit_resume`), or
+- call any single MCP tool.
+
+Reach for those individual endpoints/tools instead. This skill is for the full
+JD-vs-resume analysis end to end.
+
+## Guardrails
+
+Do not let the LLM modify scores, rankings, or risk findings — these come from
+the deterministic services (matching, retrieval ranking, rule-based audit). The
+LLM may only extract fields, add risk advice, or write the final narrative
+report, and every LLM step has a deterministic fallback. This separation is what
+keeps results reproducible and the evaluation harness meaningful.
+
 ## How to run
 
 From the project root, with the two texts saved to files:
