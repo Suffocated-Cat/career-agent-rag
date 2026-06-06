@@ -90,6 +90,23 @@ def extract_json(raw: str) -> Any:
     raise ValueError("no JSON found in model reply")
 
 
+_JSON_ONLY_SYSTEM = (
+    "Respond with a single valid JSON value only. Do not include explanations, "
+    "prose, apologies, or markdown code fences — output JSON and nothing else."
+)
+
+
+def _strict_system(system: str | None) -> str:
+    """System prompt for corrective retries: enforce JSON-only output.
+
+    Keeps the caller's system instructions (if any) and appends the strict
+    JSON-only directive.
+    """
+    if system:
+        return f"{system}\n\n{_JSON_ONLY_SYSTEM}"
+    return _JSON_ONLY_SYSTEM
+
+
 def _repair_prompt(
     original: str, previous: str | None, error: Exception, model_cls: type[T]
 ) -> str:
@@ -142,13 +159,16 @@ def generate_model(
         return fallback
 
     current_prompt = prompt
+    current_system = system
     for _ in range(retries + 1):
         raw: str | None = None
         try:
-            raw = llm.complete(current_prompt, system=system)
+            raw = llm.complete(current_prompt, system=current_system)
             data = extract_json(raw)
             return model_cls.model_validate(data)
         except Exception as exc:
-            # Feed the bad output + error back so the next attempt can correct it.
+            # Feed the bad output + error back, and tighten the system prompt to
+            # demand JSON-only, so the next attempt can correct itself.
             current_prompt = _repair_prompt(prompt, raw, exc, model_cls)
+            current_system = _strict_system(system)
     return fallback

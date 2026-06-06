@@ -14,6 +14,7 @@ class FakeLLM:
         self.replies = replies  # optional sequence of successive replies
         self.calls = 0
         self.prompts = []
+        self.systems = []
 
     def is_configured(self):
         return self.configured
@@ -21,6 +22,7 @@ class FakeLLM:
     def complete(self, prompt, system=None, **kwargs):
         self.calls += 1
         self.prompts.append(prompt)
+        self.systems.append(system)
         if self.raises:
             raise RuntimeError("api down")
         if self.calls <= self.fail_first:
@@ -142,6 +144,22 @@ class TestGenerateModel:
         assert '{"name": "Ann"}' in repair             # bad output fed back
         assert "Error:" in repair                       # the validation error
         assert "Required JSON schema:" in repair        # target schema
+
+        # First attempt uses caller's system (None here); retry tightens it.
+        assert llm.systems[0] is None
+        assert "JSON" in llm.systems[1]
+        assert "explanations" in llm.systems[1]
+
+    def test_retry_system_keeps_caller_system(self):
+        llm = FakeLLM(reply='{"name": "Ann", "age": 30}', fail_first=1)
+        generate_model(
+            llm, "extract", Person, Person(name="fb", age=1),
+            system="You are an extractor.",
+        )
+        assert llm.systems[0] == "You are an extractor."
+        # Retry system keeps the caller's instructions and adds JSON-only.
+        assert "You are an extractor." in llm.systems[1]
+        assert "JSON value only" in llm.systems[1]
 
     def test_repair_prompt_without_previous_on_call_error(self):
         # When the call itself raises, there's no previous reply to echo, but
