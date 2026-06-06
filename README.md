@@ -37,7 +37,8 @@ career-agent-rag/
 │   ├── models/              # Pydantic data schemas
 │   │   ├── jd.py
 │   │   ├── resume.py
-│   │   └── match.py
+│   │   ├── match.py
+│   │   └── audit.py
 │   ├── services/            # Business logic
 │   │   ├── embedding.py          # EmbeddingService
 │   │   ├── _embedding_helpers.py # Shared embedding utilities
@@ -47,6 +48,7 @@ career-agent-rag/
 │   │   ├── vector_matcher.py     # VectorMatcher (semantic match)
 │   │   ├── report_generator.py   # ReportGenerator (template-based report)
 │   │   ├── match_pipeline.py     # Rank resume items vs JD via retrieval
+│   │   ├── project_auditor.py    # Rule-based resume authenticity / risk checks
 │   │   └── retrieval/            # Retrieval backends (shared interface)
 │   │       ├── base.py             # Retriever protocol, tokenizer, corpus builder
 │   │       ├── bm25_retriever.py   # BM25Retriever (Okapi BM25, lexical recall)
@@ -85,6 +87,7 @@ career-agent-rag/
 │       ├── test_vector_matcher.py
 │       ├── test_report_generator.py
 │       ├── test_match_pipeline.py
+│       ├── test_project_auditor.py
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
 │           ├── test_vector_retriever.py
@@ -149,6 +152,16 @@ The `app/services/retrieval/` package treats the resume (its experiences and pro
 ## Project Relevance
 
 `match_pipeline.rank_resume_projects(jd, resume, ...)` scores each resume experience/project by retrieval relevance to a JD-derived query (skills + responsibilities). It returns `ProjectRelevance` entries — stable `doc_id`, human-readable `label`, the raw retriever `score`, and a min-max `normalized_score` (best = 1.0) — attributed back to the source item via provenance. The `method` argument selects the retrieval backend, so the same call powers ablation comparisons.
+
+## Project Risk Audit
+
+`project_auditor.audit_resume(resume)` runs transparent, rule-based authenticity checks (no LLM, so every finding is explainable) and returns a `ProjectAuditReport` with `RiskFinding`s, a normalized `risk_score`, and a summary. It detects:
+
+- **unsupported_skill** — a skill is listed but never appears in any experience/project. Advanced/high-claim skills (RAG, agents, MCP, LoRA, …) are flagged *high* and must be backed by actual prose, since listing an impressive term as a "technology" is just another unverified claim.
+- **vague_experience** — a highlight claims impact or effort without quantification (no numbers/percentages).
+- **unsupported_project_claim** — a project lists advanced technologies its description does not substantiate (too thin, or never mentions them).
+
+This gives the Week-3 LLM a structured starting point for risk analysis instead of auditing from scratch.
 
 ## Evaluation
 
