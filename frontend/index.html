@@ -54,12 +54,19 @@
     .hidden { display:none; }
     #results { display:grid; gap:20px; }
     #results.hidden { display:none; }
+    #prep { display:grid; gap:20px; }
+    #prep.hidden { display:none; }
+    .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    input#role, select#difficulty { background:var(--card); color:var(--fg);
+      border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:14px system-ui, sans-serif; }
+    input#role { min-width:220px; }
+    #prep-questions { margin:0; padding-left:20px; } #prep-questions li { margin:3px 0; }
   </style>
 </head>
 <body>
   <header>
     <h1>Career<span>Agent</span></h1>
-    <div class="sub">Paste a job description and a resume to get a match analysis.</div>
+    <div class="sub">Paste a job description and a resume — get a match report or RAG interview prep.</div>
   </header>
 
   <main>
@@ -73,9 +80,23 @@
         <textarea id="resume" placeholder="Paste the resume text..."></textarea>
       </div>
     </div>
-    <div>
-      <button id="run">Analyze</button>
-      <span id="status" class="muted" style="margin-left:12px;"></span>
+    <div class="controls">
+      <button id="run">Match report</button>
+      <button id="prep-run">Interview prep</button>
+      <input id="role" type="text" placeholder="prep roles (optional, e.g. backend)" />
+      <select id="difficulty">
+        <option value="">Any difficulty</option>
+        <option value="junior">junior</option>
+        <option value="mid">mid</option>
+        <option value="senior">senior</option>
+      </select>
+      <span id="status" class="muted"></span>
+    </div>
+
+    <div id="prep" class="hidden">
+      <div class="card"><h2>Skill gaps</h2><div class="chips" id="prep-gaps"></div></div>
+      <div class="card"><h2>Likely questions</h2><ul id="prep-questions"></ul></div>
+      <div class="card"><h2>Prep guide</h2><div id="prep-guide" class="md"></div></div>
     </div>
 
     <div id="results" class="hidden">
@@ -163,6 +184,45 @@
       $("report").innerHTML = renderMarkdown(report.full_report || "");
     }
 
+    async function interviewPrep() {
+      const jd = $("jd").value.trim();
+      const resume = $("resume").value.trim();
+      if (!jd || !resume) { setStatus("Enter both a job description and a resume.", true); return; }
+      const roleRaw = $("role").value.trim();
+      const role = roleRaw ? roleRaw.split(",").map((s) => s.trim()).filter(Boolean) : null;
+      const difficulty = $("difficulty").value || null;
+
+      $("prep-run").disabled = true;
+      setStatus("Generating interview prep… (retrieving from the knowledge base)");
+      try {
+        const res = await fetch("/api/v1/interview-prep", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jd_text: jd, resume_text: resume, role, difficulty }),
+        });
+        const body = await res.json();
+        if (!res.ok || body.status === "error") {
+          throw new Error(body.error ? body.error.message : "Request failed (" + res.status + ")");
+        }
+        renderPrep(body.data);
+        setStatus("Done.");
+      } catch (e) {
+        setStatus(e.message, true);
+      } finally {
+        $("prep-run").disabled = false;
+      }
+    }
+
+    function renderPrep(data) {
+      $("prep").classList.remove("hidden");
+      chips($("prep-gaps"), data.gaps || [], "bad");
+      const qs = data.questions || [];
+      $("prep-questions").innerHTML = qs.length
+        ? qs.map((q) => `<li>${escapeHtml(q)}</li>`).join("")
+        : '<li class="muted">No questions matched the current filters.</li>';
+      $("prep-guide").innerHTML = renderMarkdown(data.guide || "");
+    }
+
     // Minimal Markdown → HTML for the subset the reports use (headings,
     // bold/italic/code, lists, tables, rules). Input is HTML-escaped first.
     function mdInline(text) {
@@ -211,6 +271,7 @@
     }
 
     $("run").addEventListener("click", analyze);
+    $("prep-run").addEventListener("click", interviewPrep);
   </script>
 </body>
 </html>
