@@ -28,11 +28,18 @@ CREATE TABLE IF NOT EXISTS knowledge_doc (
 
 
 def get_connection(dsn: str | None = None) -> Any:  # pragma: no cover - needs a DB
-    """Open a psycopg connection with the pgvector type registered."""
+    """Open a psycopg connection with the pgvector type registered.
+
+    Ensures the ``vector`` extension exists first, since ``register_vector``
+    needs the type to be present in the database.
+    """
     import psycopg
     from pgvector.psycopg import register_vector
 
     conn = psycopg.connect(dsn or settings.DATABASE_URL)
+    with conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.commit()
     register_vector(conn)
     return conn
 
