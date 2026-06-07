@@ -76,6 +76,29 @@ class TestComplete:
         LLMClient(api_key="k", model="m", client=fake).complete("q")
         assert fake.calls[0]["temperature"] == 0.0
 
+    def test_disables_deepseek_thinking(self):
+        fake = FakeOpenAI()
+        LLMClient(
+            api_key="k",
+            base_url="https://api.deepseek.com",
+            model="deepseek-v4-pro",
+            client=fake,
+        ).complete("q")
+        assert fake.calls[0]["extra_body"] == {"thinking": {"type": "disabled"}}
+
+    def test_merges_existing_extra_body_for_deepseek(self):
+        fake = FakeOpenAI()
+        LLMClient(
+            api_key="k",
+            base_url="https://api.deepseek.com",
+            model="deepseek-v4-pro",
+            client=fake,
+        ).complete("q", extra_body={"foo": "bar"})
+        assert fake.calls[0]["extra_body"] == {
+            "foo": "bar",
+            "thinking": {"type": "disabled"},
+        }
+
 
 class TestUsageCapture:
     def test_records_last_usage(self):

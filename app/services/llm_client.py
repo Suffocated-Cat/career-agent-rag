@@ -85,6 +85,11 @@ class LLMClient:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
+        if self._is_deepseek():
+            extra_body = dict(kwargs.pop("extra_body", {}) or {})
+            extra_body.setdefault("thinking", {"type": "disabled"})
+            kwargs["extra_body"] = extra_body
+
         response = self._get_client().chat.completions.create(
             model=self.model,
             messages=messages,
@@ -93,6 +98,11 @@ class LLMClient:
         )
         self._record_usage(response)
         return response.choices[0].message.content
+
+    def _is_deepseek(self) -> bool:
+        """True when the configured endpoint/model is DeepSeek-compatible."""
+        target = f"{self.base_url or ''} {self.model or ''}".lower()
+        return "deepseek" in target
 
     def _record_usage(self, response: Any) -> None:
         """Capture token usage from a response, if present."""
