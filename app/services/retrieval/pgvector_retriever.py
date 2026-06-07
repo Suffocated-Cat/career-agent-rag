@@ -40,12 +40,24 @@ class PgVectorRetriever:
         self.dsn = dsn or settings.DATABASE_URL
         self.table = table
 
-    def search(self, query: str, k: int = 10) -> list[RetrievalResult]:
+    def search(
+        self,
+        query: str,
+        k: int = 10,
+        filters: dict | None = None,
+    ) -> list[RetrievalResult]:
         """Return the top-k knowledge docs most similar to *query*.
 
         Embeds the query and ranks rows by cosine similarity (``1 - distance``)
-        using pgvector. Returns an empty list if there is no embedding service
-        or the query is blank.
+        using pgvector. Optional *filters* apply metadata predicates before
+        ranking — this is the vector-search-plus-metadata-filtering that makes
+        pgvector worthwhile:
+
+          - scalar value  → equality, e.g. ``{"difficulty": "mid"}``
+          - list value    → jsonb overlap, e.g. ``{"role": ["backend"]}``
+
+        Returns an empty list if there is no embedding service or the query is
+        blank.
         """
         if self.embedding_service is None or not query.strip():
             return []
@@ -54,15 +66,27 @@ class PgVectorRetriever:
 
         vector = np.asarray(self.embedding_service.encode([query]), dtype=np.float64)[0]
 
+        where = ["embedding IS NOT NULL"]
+        filter_params: list = []
+        for key, value in (filters or {}).items():
+            if isinstance(value, (list, tuple)):
+                where.append("metadata -> %s ?| %s")  # jsonb array overlap
+                filter_params += [key, list(value)]
+            else:
+                where.append("metadata ->> %s = %s")  # scalar equality
+                filter_params += [key, str(value)]
+
+        sql = (
+            f"SELECT id, text, 1 - (embedding <=> %s) AS score "
+            f"FROM {self.table} WHERE {' AND '.join(where)} "
+            f"ORDER BY embedding <=> %s LIMIT %s"
+        )
+        params = [vector, *filter_params, vector, k]
+
         conn = get_connection(self.dsn)
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"SELECT id, text, 1 - (embedding <=> %s) AS score "
-                    f"FROM {self.table} WHERE embedding IS NOT NULL "
-                    f"ORDER BY embedding <=> %s LIMIT %s",
-                    (vector, vector, k),
-                )
+                cur.execute(sql, params)
                 rows = cur.fetchall()
         finally:
             conn.close()

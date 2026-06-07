@@ -14,7 +14,7 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 - Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
 - Frontend: minimal static UI served at `/ui/` (paste JD + resume → report)
-- Tests: `413 passed`, `97%` coverage in Docker on Python 3.11.15 (1 DB integration test skipped without Postgres)
+- Tests: `414 passed` with Postgres up (`413 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -344,8 +344,8 @@ It decodes JSON tool output to dicts/lists and raises `MCPToolError` when the se
 
 This is where retrieval-augmented *generation* actually happens. The other retrieval in the project ranks the resume's own items; here the LLM's output is **grounded on documents retrieved from an external knowledge base**.
 
-- **Store:** a curated interview-question / skill-note KB (`data/knowledge/`) lives in **PostgreSQL + pgvector**. `scripts/ingest_kb.py` embeds each document and upserts it into the `knowledge_doc` table (`vector(384)`).
-- **Retriever:** `PgVectorRetriever` implements the same `search(query, k)` interface as the in-memory retrievers but ranks DB-side with pgvector's cosine operator (`<=>`). Because it's behind the `Retriever` protocol, the in-memory BM25/vector retriever is used for the offline test suite while pgvector backs production — a single integration test exercises the real DB and self-skips when Postgres isn't available.
+- **Store:** a curated interview-question / skill-note KB (`data/knowledge/`, ~145 docs across ~30 topics) lives in **PostgreSQL + pgvector**. Entries carry `skill` / `type` plus optional `role` / `difficulty` / `tags` / `answer_outline`, which the loader puts into the `metadata` (`jsonb`) column. `scripts/ingest_kb.py` embeds each document and upserts it into `knowledge_doc` (`vector(384)`, GIN index on `metadata`). (The `fastapi` topic is fully enriched as the reference; other topics can be enriched incrementally with the same fields.)
+- **Retriever:** `PgVectorRetriever.search(query, k, filters=...)` implements the same `Retriever` interface but ranks DB-side with pgvector's cosine operator (`<=>`), and supports **metadata-filtered vector search** — scalar equality (`{"difficulty": "mid"}`) and jsonb array overlap (`{"role": ["backend"]}`) applied before ranking. That filtering + persistence is the concrete reason to use pgvector over an in-memory index. Because it's behind the `Retriever` protocol, the in-memory BM25/vector retriever is used for the offline test suite while pgvector backs production — a single integration test exercises the real DB (including a metadata filter) and self-skips when Postgres isn't available.
 - **Generation:** `interview_prep.generate_interview_prep(jd, resume, kb_retriever, llm)` retrieves the questions relevant to the JD's skills, then asks the LLM to write a prep guide **grounded strictly on the retrieved questions**, highlighting the candidate's skill gaps. With no LLM it falls back to listing the retrieved questions + gaps. Exposed at `POST /api/v1/interview-prep`.
 
 This keeps the architecture's invariant: retrieval and the structured match stay deterministic; the LLM only synthesizes over retrieved context, with a fallback.

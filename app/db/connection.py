@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS knowledge_doc (
     metadata jsonb NOT NULL DEFAULT '{{}}',
     embedding vector({EMBED_DIM})
 );
+CREATE INDEX IF NOT EXISTS knowledge_doc_metadata_gin ON knowledge_doc USING gin (metadata);
 """
 
 

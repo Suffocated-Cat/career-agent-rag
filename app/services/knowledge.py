@@ -30,18 +30,32 @@ DEFAULT_KB_PATH = (
 )
 
 
+# Optional enrichment fields carried through into metadata for filtering.
+_METADATA_FIELDS = ("role", "difficulty", "tags", "answer_outline")
+
+
 def load_kb_documents(path: str | Path | None = None) -> list[RetrievalDocument]:
-    """Load knowledge-base entries as RetrievalDocuments."""
+    """Load knowledge-base entries as RetrievalDocuments.
+
+    ``skill`` and ``type`` are always present; ``role`` / ``difficulty`` /
+    ``tags`` / ``answer_outline`` are optional and, when present, carried into
+    metadata so pgvector can do metadata-filtered semantic search.
+    """
     data = json.loads(Path(path or DEFAULT_KB_PATH).read_text())
     docs: list[RetrievalDocument] = []
     for i, entry in enumerate(data):
+        metadata = {"skill": entry.get("skill", ""), "type": entry.get("type", "question")}
+        for field in _METADATA_FIELDS:
+            value = entry.get(field)
+            if value not in (None, "", []):
+                metadata[field] = value
         docs.append(
             RetrievalDocument(
                 id=entry["id"],
                 text=entry["text"],
                 source_type=entry.get("type", "question"),
                 source_index=i,
-                metadata={"skill": entry.get("skill", ""), "type": entry.get("type", "question")},
+                metadata=metadata,
             )
         )
     return docs

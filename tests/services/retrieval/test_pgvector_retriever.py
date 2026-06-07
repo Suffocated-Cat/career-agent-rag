@@ -61,6 +61,20 @@ class TestSearchUnit:
     def test_blank_query_returns_empty(self):
         assert PgVectorRetriever(_FakeEmbed()).search("   ") == []
 
+    def test_filters_build_metadata_predicates(self, monkeypatch):
+        conn = _FakeConn([(1, "t", 0.9)])
+        monkeypatch.setattr("app.db.connection.get_connection", lambda dsn=None: conn)
+
+        PgVectorRetriever(_FakeEmbed()).search(
+            "x", k=3, filters={"difficulty": "mid", "role": ["backend"]}
+        )
+        sql, params = conn.cur.executed
+        assert "metadata ->> %s = %s" in sql       # scalar equality
+        assert "metadata -> %s ?| %s" in sql       # jsonb array overlap
+        # params = [vector, <filter params>, vector, k]; check the filter slice
+        # (avoid `in` over the list since it holds a NumPy array).
+        assert params[1:-2] == ["difficulty", "mid", "role", ["backend"]]
+
 
 def test_pgvector_roundtrip_integration():
     """Real pgvector round-trip — skipped unless psycopg + a DB are available."""
@@ -75,12 +89,20 @@ def test_pgvector_roundtrip_integration():
 
     ensure_schema(conn)
     vec = np.ones(EMBED_DIM, dtype=np.float64)
+    import json
+
+    rows = [
+        ("test:int:mid", "mid sample", json.dumps({"difficulty": "mid"})),
+        ("test:int:senior", "senior sample", json.dumps({"difficulty": "senior"})),
+    ]
     with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO knowledge_doc (doc_id, skill, doc_type, text, embedding) "
-            "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (doc_id) DO UPDATE SET embedding = EXCLUDED.embedding",
-            ("test:integration", "python", "question", "integration sample", vec),
-        )
+        for doc_id, text, meta in rows:
+            cur.execute(
+                "INSERT INTO knowledge_doc (doc_id, skill, doc_type, text, metadata, embedding) "
+                "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (doc_id) DO UPDATE SET "
+                "metadata = EXCLUDED.metadata, embedding = EXCLUDED.embedding",
+                (doc_id, "python", "question", text, meta, vec),
+            )
     conn.commit()
     conn.close()
 
@@ -88,5 +110,13 @@ def test_pgvector_roundtrip_integration():
         def encode(self, texts):
             return np.ones((len(texts), EMBED_DIM), dtype=np.float64)
 
-    results = PgVectorRetriever(_Emb()).search("anything", k=5)
-    assert any(r.text == "integration sample" for r in results)
+    retriever = PgVectorRetriever(_Emb())
+
+    # Unfiltered: both samples are retrievable.
+    texts = {r.text for r in retriever.search("anything", k=50)}
+    assert {"mid sample", "senior sample"} <= texts
+
+    # Metadata-filtered: only the mid-difficulty sample.
+    filtered = {r.text for r in retriever.search("anything", k=50, filters={"difficulty": "mid"})}
+    assert "mid sample" in filtered
+    assert "senior sample" not in filtered
