@@ -32,7 +32,24 @@ def test_enriched_fields_carried_into_metadata():
     assert fa.metadata["answer_outline"]
 
 
-def test_basic_entry_has_only_core_metadata():
-    docs = {d.id: d for d in load_kb_documents()}
-    basic = docs["python:q1"]  # not enriched
-    assert set(basic.metadata) == {"skill", "type"}
+def test_all_entries_enriched():
+    docs = load_kb_documents()
+    for d in docs:
+        assert d.metadata.get("role"), f"{d.id} missing role"
+        assert d.metadata.get("difficulty"), f"{d.id} missing difficulty"
+        assert d.metadata.get("tags"), f"{d.id} missing tags"
+        assert d.metadata.get("answer_outline"), f"{d.id} missing answer_outline"
+
+
+def test_optional_fields_skipped_when_absent():
+    # The loader only adds enriched keys when present in the source entry.
+    import json
+    import tempfile
+    from pathlib import Path
+
+    raw = [{"id": "x:1", "skill": "x", "type": "question", "text": "bare entry"}]
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "kb.json"
+        p.write_text(json.dumps(raw))
+        doc = load_kb_documents(p)[0]
+    assert set(doc.metadata) == {"skill", "type"}
