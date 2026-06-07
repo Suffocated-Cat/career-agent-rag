@@ -12,7 +12,8 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 - LLM: optional OpenAI-compatible client with deterministic fallback
 - MCP: stdio server exposing the core tools
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
-- Tests: `395 passed`, `97%` coverage in Docker on Python 3.11.15
+- Frontend: minimal static UI served at `/ui/` (paste JD + resume → report)
+- Tests: `398 passed`, `97%` coverage in Docker on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -28,6 +29,7 @@ docker compose up --build
 The API will be available at:
 
 - Service index: `http://localhost:8000/`
+- Web UI: `http://localhost:8000/ui/`
 - Health check: `http://localhost:8000/health`
 - Swagger docs: `http://localhost:8000/docs`
 
@@ -93,7 +95,8 @@ career-agent-rag/
 │   │       ├── jd.py        # POST /api/v1/jd/parse
 │   │       ├── resume.py    # POST /api/v1/resume/parse
 │   │       ├── match.py     # POST /api/v1/match, /api/v1/match/report
-│   │       └── audit.py     # POST /api/v1/audit
+│   │       ├── audit.py     # POST /api/v1/audit
+│   │       └── career.py    # POST /api/v1/career-match (end-to-end)
 │   ├── models/              # Pydantic data schemas
 │   │   ├── jd.py
 │   │   ├── resume.py
@@ -151,7 +154,8 @@ career-agent-rag/
 │   │       ├── test_jd.py
 │   │       ├── test_resume.py
 │   │       ├── test_match.py
-│   │       └── test_audit.py
+│   │       ├── test_audit.py
+│   │       └── test_career.py
 │   ├── fixtures/            # Evaluation dataset
 │   │   ├── retrieval_documents.json # Pooled resume corpus (with stable ids)
 │   │   ├── relevance_queries.json   # Queries + graded relevance labels
@@ -191,7 +195,7 @@ career-agent-rag/
 │           ├── test_hybrid_retriever.py
 │           ├── test_reranker.py
 │           └── test_factory.py
-├── frontend/                # Reserved for future frontend
+├── frontend/                # Minimal static UI (index.html)
 ├── experiments/             # Standalone experiment scripts
 │   ├── day1_embedding_demo.py
 │   ├── day2_tokenizer_demo.py
@@ -214,6 +218,8 @@ career-agent-rag/
 | POST | `/api/v1/match` | Match JD against resume (skills, relevance, risk audit) |
 | POST | `/api/v1/match/report` | Generate matching report (incl. risk audit) |
 | POST | `/api/v1/audit` | Audit a resume for authenticity / quality risks |
+| POST | `/api/v1/career-match` | End-to-end: parse + match + rank + audit + report from raw text |
+| GET | `/ui/` | Minimal browser UI |
 
 Swagger docs: `http://localhost:8000/docs`
 

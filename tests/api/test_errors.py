@@ -67,6 +67,12 @@ class TestRootAndHealth:
         assert data["status"] == "ok"
         assert data["app_name"] == "CareerAgent"
         assert data["docs"] == "/docs"
+        assert data["ui"] == "/ui/"
+
+    def test_ui_served(self, client):
+        resp = client.get("/ui/")
+        assert resp.status_code == 200
+        assert "CareerAgent" in resp.text
 
     def test_real_app_validation_uses_envelope(self, client):
         # The real app's parse endpoint rejects empty text with the envelope.

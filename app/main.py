@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.errors import register_exception_handlers
 from app.api.router import api_router
@@ -26,15 +29,20 @@ register_exception_handlers(app)
 # All business APIs are mounted under /api/v1/
 app.include_router(api_router, prefix="/api/v1")
 
+# Minimal browser UI (served at /ui/).
+_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/ui", StaticFiles(directory=_FRONTEND_DIR, html=True), name="ui")
+
 
 @app.get("/")
 async def root():
-    """Service index with name, version, and docs link."""
+    """Service index with name, version, and links."""
     return {
         "status": "ok",
         "app_name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "docs": "/docs",
+        "ui": "/ui/",
     }
 
 
