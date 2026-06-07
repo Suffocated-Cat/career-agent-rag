@@ -1,111 +1,139 @@
 """
-Default tool set for the AgentController.
+Default ReAct tools — thin wrappers over CareerAgent services.
 
-Each tool wraps an existing CareerAgent service and reads what it needs from
-the AgentContext, raising a clear error when a required input is missing.
-``build_default_controller`` assembles them into a ready-to-use controller.
+Each tool reads/writes the shared ``ReactState`` and returns a concise text
+observation. Preconditions (e.g. "parse the JD first") are returned as error
+observations so the agent can reason about and recover from ordering mistakes —
+which is the point of the ReAct loop.
 """
 
-from app.services.agent.controller import AgentContext, AgentController, Tool
+from app.services.agent.react_controller import ReactAgent
+from app.services.agent.schemas import ReactState, ReactTool
 from app.services.jd_parser import parse_jd
 from app.services.resume_parser import parse_resume
 from app.services.keyword_matcher import match as match_jd_resume
-from app.services.project_auditor import audit_resume
 from app.services.match_pipeline import rank_resume_projects
+from app.services.project_auditor import audit_resume
+from app.services.report_generator import generate_report
 
 
-def _require(value, what: str):
-    """Return *value* or raise a clear error naming the missing input."""
-    if value is None:
-        raise ValueError(f"This tool requires {what}.")
-    return value
-
-
-def _jd_parser_handler(ctx: AgentContext):
-    text = ctx.jd_text or (ctx.jd.raw_text if ctx.jd else None)
-    return parse_jd(_require(text, "jd_text"), embedding_service=ctx.embedding_service)
-
-
-def _resume_parser_handler(ctx: AgentContext):
-    text = ctx.resume_text or (ctx.resume.raw_text if ctx.resume else None)
-    return parse_resume(
-        _require(text, "resume_text"), embedding_service=ctx.embedding_service
+def _parse_jd(state: ReactState, args: dict) -> str:
+    text = args.get("text") or state.jd_text
+    if not text:
+        return "Error: no JD text provided (pass action_input.text or seed jd_text)."
+    state.jd = parse_jd(text, embedding_service=state.embedding_service, llm=state.llm)
+    return (
+        f"Parsed JD: title={state.jd.title!r}, {len(state.jd.skills)} skills, "
+        f"{len(state.jd.responsibilities)} responsibilities."
     )
 
 
-def _resume_matcher_handler(ctx: AgentContext):
-    jd = _require(ctx.jd, "a parsed jd")
-    resume = _require(ctx.resume, "a parsed resume")
-    return match_jd_resume(jd, resume, embedding_service=ctx.embedding_service)
-
-
-def _project_auditor_handler(ctx: AgentContext):
-    return audit_resume(_require(ctx.resume, "a parsed resume"))
-
-
-def _project_ranker_handler(ctx: AgentContext):
-    jd = _require(ctx.jd, "a parsed jd")
-    resume = _require(ctx.resume, "a parsed resume")
-    method = "hybrid" if ctx.embedding_service is not None else "bm25"
-    return rank_resume_projects(
-        jd, resume, embedding_service=ctx.embedding_service, method=method
+def _parse_resume(state: ReactState, args: dict) -> str:
+    text = args.get("text") or state.resume_text
+    if not text:
+        return "Error: no resume text provided (pass action_input.text or seed resume_text)."
+    state.resume = parse_resume(
+        text, embedding_service=state.embedding_service, llm=state.llm
+    )
+    return (
+        f"Parsed resume: {len(state.resume.skills)} skills, "
+        f"{len(state.resume.experience)} experiences, "
+        f"{len(state.resume.projects)} projects."
     )
 
 
-def default_tools() -> list[Tool]:
-    """Build the standard CareerAgent tool set."""
+def _match(state: ReactState, args: dict) -> str:
+    if state.jd is None:
+        return "Error: parse the JD first (parse_jd)."
+    if state.resume is None:
+        return "Error: parse the resume first (parse_resume)."
+    state.match = match_jd_resume(
+        state.jd, state.resume, embedding_service=state.embedding_service
+    )
+    m = state.match
+    return (
+        f"Match score {m.overall_score:.2f}: {len(m.matched_skills)} matched, "
+        f"{len(m.missing_skills)} missing skills"
+        + (f" ({', '.join(m.missing_skills[:5])})." if m.missing_skills else ".")
+    )
+
+
+def _rank_projects(state: ReactState, args: dict) -> str:
+    if state.jd is None or state.resume is None:
+        return "Error: parse the JD and resume first."
+    method = "hybrid" if state.embedding_service is not None else "bm25"
+    rels = rank_resume_projects(
+        state.jd, state.resume, embedding_service=state.embedding_service, method=method
+    )
+    if state.match is not None:
+        state.match.project_relevance = rels
+    if not rels:
+        return "No relevant experiences found."
+    top = ", ".join(f"{r.label} ({r.normalized_score:.2f})" for r in rels[:3])
+    return f"Top experiences by relevance: {top}."
+
+
+def _audit(state: ReactState, args: dict) -> str:
+    if state.resume is None:
+        return "Error: parse the resume first (parse_resume)."
+    audit = audit_resume(state.resume, llm=state.llm)
+    if state.match is not None:
+        state.match.project_audit = audit
+    return audit.summary
+
+
+def _generate_report(state: ReactState, args: dict) -> str:
+    if state.match is None:
+        return "Error: run match first (match)."
+    state.report = generate_report(state.jd, state.resume, state.match, llm=state.llm)
+    return (
+        f"Report generated: {state.report.overall_rating} match, "
+        f"score {state.report.overall_score:.2f}."
+    )
+
+
+def default_tools() -> list[ReactTool]:
+    """Build the standard CareerAgent ReAct tool set."""
     return [
-        Tool(
-            name="jd_parser",
-            description="Parse a job description into skills, responsibilities, "
-            "and nice-to-haves.",
-            keywords=(
-                "jd", "job description", "job posting", "parse jd",
-                "analyze jd", "requirements", "responsibilities",
-            ),
-            handler=_jd_parser_handler,
+        ReactTool(
+            "parse_jd",
+            "Parse the job description into skills/responsibilities. "
+            'Optional action_input: {"text": "<jd text>"}.',
+            _parse_jd,
         ),
-        Tool(
-            name="resume_parser",
-            description="Parse a resume into skills, experience, projects, "
-            "and education.",
-            keywords=(
-                "resume", "cv", "parse resume", "extract resume",
-            ),
-            handler=_resume_parser_handler,
+        ReactTool(
+            "parse_resume",
+            "Parse the resume into skills/experience/projects. "
+            'Optional action_input: {"text": "<resume text>"}.',
+            _parse_resume,
         ),
-        Tool(
-            name="resume_matcher",
-            description="Match a resume against a job description and score the fit.",
-            keywords=(
-                "match", "matching", "fit", "compare", "score", "alignment",
-                "gap", "suitability",
-            ),
-            handler=_resume_matcher_handler,
+        ReactTool(
+            "match",
+            "Score the resume against the JD. Requires parsed JD + resume. "
+            "No action_input.",
+            _match,
         ),
-        Tool(
-            name="project_auditor",
-            description="Audit a resume for unsupported or vague claims and "
-            "authenticity risks.",
-            keywords=(
-                "audit", "risk", "authenticity", "verify", "fake",
-                "unsupported", "trustworth", "credibility",
-            ),
-            handler=_project_auditor_handler,
+        ReactTool(
+            "rank_projects",
+            "Rank the resume's experiences/projects by relevance to the JD. "
+            "Requires parsed JD + resume. No action_input.",
+            _rank_projects,
         ),
-        Tool(
-            name="project_ranker",
-            description="Rank a resume's experiences and projects by relevance "
-            "to the job description.",
-            keywords=(
-                "rank", "relevance", "most relevant", "ranking",
-                "which project", "best experience",
-            ),
-            handler=_project_ranker_handler,
+        ReactTool(
+            "audit",
+            "Audit the resume for unsupported/exaggerated claims. Requires a "
+            "parsed resume. No action_input.",
+            _audit,
+        ),
+        ReactTool(
+            "generate_report",
+            "Produce the final match report. Requires that match has run. "
+            "No action_input.",
+            _generate_report,
         ),
     ]
 
 
-def build_default_controller() -> AgentController:
-    """Create an AgentController preloaded with the default tools."""
-    return AgentController(default_tools())
+def build_default_agent(llm, max_steps: int = 8) -> ReactAgent:
+    """Create a ReactAgent preloaded with the default tools."""
+    return ReactAgent(llm, default_tools(), max_steps=max_steps)

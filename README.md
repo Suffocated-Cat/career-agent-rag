@@ -8,11 +8,11 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 
 - Backend: FastAPI service with versioned APIs under `/api/v1`
 - Retrieval: BM25, vector, hybrid fusion, and optional reranking
-- Agent: keyword and LLM-based tool selection with trace logging
+- Agent: ReAct loop (Reason → Act → Observe) that calls the tools, with step tracing
 - LLM: optional OpenAI-compatible client with deterministic fallback
 - MCP: stdio server exposing the core tools
-- Evaluation: retrieval metrics, ablation runner, selector evaluation, LLM-as-judge, latency/cost utilities
-- Tests: `417 passed`, `97%` coverage in Docker on Python 3.11.15
+- Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
+- Tests: `395 passed`, `97%` coverage in Docker on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -54,23 +54,30 @@ Use `--no-llm` for a fully deterministic run.
 
 ## Architecture
 
+Entry points sit on top of one shared core — they are alternative ways to
+invoke the same services, not stages of a single pipeline:
+
 ```
-User Input (JD / Resume)
-       ↓
-JD Parser / Resume Parser
-       ↓
-BM25 + Vector Retrieval
-       ↓
-Reranker
-       ↓
-Agent Controller
-       ↓
-MCP Tools
-       ↓
-Optional LLM Report Generation
-       ↓
-Match Analysis + Skill Gap + Learning Plan
+Inputs (JD / Resume)
+        │
+   Entry points:  REST API (/api/v1) · ReAct agent · MCP server · career-match skill
+        │
+        ▼
+ Deterministic core  (owns all scores / rankings / findings)
+   JD & resume parsing · BM25 + vector + hybrid retrieval (+ optional rerank)
+   skill matching · project-relevance ranking · rule-based risk audit
+        │
+        ▼
+ Optional LLM layer  (schema-validated, deterministic fallback)
+   field extraction · risk advice · grounded narrative report
+        │
+        ▼
+ Outputs: match score · skill gaps · ranked experience · risk findings · report
 ```
+
+The deterministic core always computes the numbers; the LLM layer only
+extracts, advises, and narrates on top of them. The ReAct agent and MCP server
+are orchestration/exposure layers over the same core services.
 
 ## Project Structure
 
@@ -106,11 +113,11 @@ career-agent-rag/
 │   │   ├── llm_client.py         # LLMClient (OpenAI-compatible chat wrapper)
 │   │   ├── llm_support.py        # LLM helpers w/ deterministic fallback + schema validation
 │   │   ├── usage.py              # TokenUsage / UsageTracker / estimate_cost
-│   │   ├── agent/               # Multi-tool agent
-│   │   │   ├── controller.py      # AgentController + KeywordToolSelector
-│   │   │   ├── selectors.py       # LLMToolSelector (LLM-based routing)
-│   │   │   ├── tools.py           # Default tools wrapping the services
-│   │   │   └── trace.py           # Tracer + TraceEntry (tool-call audit trail)
+│   │   ├── agent/               # ReAct agent
+│   │   │   ├── react_controller.py # ReactAgent (Thought→Action→Observation loop)
+│   │   │   ├── tools.py            # Default ReAct tools over shared state
+│   │   │   ├── schemas.py          # ReactState / ReactTool / ReactStep / ReactResult / ReactDecision
+│   │   │   └── trace.py            # Scratchpad rendering + step serialization
 │   │   └── retrieval/            # Retrieval backends (shared interface)
 │   │       ├── base.py             # Retriever protocol, tokenizer, corpus builder
 │   │       ├── bm25_retriever.py   # BM25Retriever (Okapi BM25, lexical recall)
@@ -128,7 +135,6 @@ career-agent-rag/
 │   │   ├── metrics.py           # recall@k, MRR, nDCG@k
 │   │   ├── datasets.py          # fixture loaders (corpus + labeled queries)
 │   │   ├── runner.py            # evaluate_retriever() → EvalReport
-│   │   ├── selector_eval.py     # evaluate_selector() → SelectorReport
 │   │   ├── ablation.py          # run_ablation() across retrieval methods
 │   │   ├── llm_judge.py         # LLM-as-Judge: grounding + quality scoring
 │   │   └── perf.py              # LatencyRecorder + p50/p95/p99 stats
@@ -150,13 +156,11 @@ career-agent-rag/
 │   │   ├── retrieval_documents.json # Pooled resume corpus (with stable ids)
 │   │   ├── relevance_queries.json   # Queries + graded relevance labels
 │   │   ├── sample_jobs.json         # Eval jobs (job_id link + requirements)
-│   │   ├── job_descriptions.json    # Same jobs in JobDescription model shape
-│   │   └── tool_selection.json      # Labeled task → expected tool cases
+│   │   └── job_descriptions.json    # Same jobs in JobDescription model shape
 │   ├── eval/
 │   │   ├── test_metrics.py          # recall@k, MRR, nDCG@k
 │   │   ├── test_datasets.py         # fixture loaders
 │   │   ├── test_runner.py           # evaluate_retriever over fixtures
-│   │   ├── test_selector_eval.py    # evaluate_selector over fixtures
 │   │   ├── test_ablation.py         # ablation harness
 │   │   ├── test_llm_judge.py        # LLM-as-Judge
 │   │   └── test_perf.py             # latency stats
@@ -178,9 +182,8 @@ career-agent-rag/
 │       ├── test_llm_support.py
 │       ├── test_usage.py
 │       ├── agent/
-│       │   ├── test_controller.py
+│       │   ├── test_react.py
 │       │   ├── test_tools.py
-│       │   ├── test_selectors.py
 │       │   └── test_trace.py
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
@@ -263,19 +266,14 @@ This gives the Week-3 LLM a structured starting point for risk analysis instead 
 
 ## Agent
 
-`app/services/agent/` turns CareerAgent from a fixed pipeline into a multi-tool agent. `AgentController` holds a set of `Tool`s and routes a natural-language task to the best one, then runs it against a shared `AgentContext`:
+`app/services/agent/` is a **ReAct agent** (`ReactAgent`): instead of routing a task to a single tool, it runs a Reason→Act→Observe loop. At each step the LLM emits a thought and either an action (tool call) or a final answer; the tool runs, its observation is fed back, and the loop continues until the LLM finishes or a step budget is hit.
 
-- `build_default_controller()` wires the existing services as tools — `jd_parser`, `resume_parser`, `resume_matcher`, `project_auditor`, `project_ranker`.
-- `run(context)` selects a tool, executes it, and returns a `ToolResult` with the chosen tool, its output, and the selection reason.
+- `build_default_agent(llm)` wires the services as ReAct tools — `parse_jd`, `parse_resume`, `match`, `rank_projects`, `audit`, `generate_report`.
+- Tools operate on a shared `ReactState` (working memory), so the model passes only small inputs and reads concise observations rather than echoing large objects between steps.
+- Tool preconditions surface as error observations (e.g. "parse the JD first"), which the agent reasons about and recovers from — genuine self-correction.
+- `run(task, state)` returns a `ReactResult` with the final answer, the recorded `steps` (thought/action/observation), and whether it completed within the budget.
 
-Selection is pluggable via the `ToolSelector` protocol:
-
-- **`KeywordToolSelector`** (default) — scores tools by keyword overlap; transparent and offline.
-- **`LLMToolSelector`** — sends the task and tool descriptions to an LLM and asks it to name the best tool (strict JSON). It degrades gracefully: if the LLM is unconfigured, errors, or returns an unknown name, it falls back to the keyword selector, so the agent never hard-fails on the model.
-
-Pass a `Tracer` to the controller to record every run as a `TraceEntry` — task, selected tool, selection reason, latency, and status (`ok` / `error` / `no_tool`, with the error message on failures). `ToolResult` also carries `latency_ms`. This is the audit trail for debugging wrong tool selection and tool failures (`tracer.as_dicts()` serializes it for logs or an API).
-
-`eval/selector_eval.py` evaluates a selector against a labeled task→tool dataset (`tests/fixtures/tool_selection.json`): `evaluate_selector(selector, tools, cases)` returns per-case results and overall accuracy. On the bundled set the keyword selector scores **0.875** and the LLM selector **1.000** — the LLM resolves the ambiguous phrasings ("how well does my resume *match*…", "best *fit*…") that tie under keyword scoring.
+The agent is LLM-driven by design (it requires a configured LLM); decisions are parsed as strict JSON via the same `extract_json` helper, and a malformed/unknown reply becomes a recoverable observation rather than a crash. Note the deterministic-core invariant still holds: the tools call the same services, so scores/rankings/findings are computed deterministically — the LLM only decides *which* steps to take.
 
 `LLMClient` (`llm_client.py`) is a thin wrapper over any **OpenAI-compatible** chat endpoint, reading `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` from settings. The SDK client is created lazily and can be injected for testing.
 

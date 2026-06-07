@@ -1,0 +1,148 @@
+"""Tests for the ReAct agent loop."""
+import json
+
+import pytest
+
+from app.services.agent.react_controller import ReactAgent
+from app.services.agent.schemas import (
+    ReactResult,
+    ReactState,
+    ReactStep,
+    ReactTool,
+)
+
+
+class ScriptedLLM:
+    """Returns a fixed sequence of replies (last one repeats)."""
+
+    def __init__(self, replies, configured=True):
+        self.replies = list(replies)
+        self.configured = configured
+        self.calls = 0
+        self.prompts = []
+
+    def is_configured(self):
+        return self.configured
+
+    def complete(self, prompt, system=None, **kwargs):
+        self.prompts.append(prompt)
+        reply = self.replies[min(self.calls, len(self.replies) - 1)]
+        self.calls += 1
+        return reply
+
+
+def _act(action, **args):
+    return json.dumps({"thought": "go", "action": action, "action_input": args})
+
+
+def _final(answer):
+    return json.dumps({"thought": "done", "final_answer": answer})
+
+
+def _echo_tool():
+    return ReactTool("echo", "echo back", lambda state, args: f"echoed {args.get('x')}")
+
+
+def _state():
+    return ReactState()
+
+
+class TestReactLoop:
+    def test_final_answer_immediately(self):
+        agent = ReactAgent(ScriptedLLM([_final("all done")]), [_echo_tool()])
+        result = agent.run("task", _state())
+        assert isinstance(result, ReactResult)
+        assert result.completed is True
+        assert result.answer == "all done"
+        assert result.steps == []
+
+    def test_tool_call_then_finish(self):
+        llm = ScriptedLLM([_act("echo", x="hi"), _final("done")])
+        agent = ReactAgent(llm, [_echo_tool()])
+        result = agent.run("task", _state())
+        assert result.completed is True
+        assert len(result.steps) == 1
+        step = result.steps[0]
+        assert step.action == "echo"
+        assert step.observation == "echoed hi"
+
+    def test_observation_fed_back_into_prompt(self):
+        llm = ScriptedLLM([_act("echo", x="hi"), _final("done")])
+        ReactAgent(llm, [_echo_tool()]).run("task", _state())
+        # Second prompt must contain the first step's observation.
+        assert "echoed hi" in llm.prompts[1]
+
+    def test_unknown_tool_observation(self):
+        llm = ScriptedLLM([_act("nope"), _final("x")])
+        result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
+        assert "unknown tool" in result.steps[0].observation
+
+    def test_tool_error_becomes_observation(self):
+        def _boom(state, args):
+            raise ValueError("kaboom")
+
+        llm = ScriptedLLM([_act("boom"), _final("x")])
+        agent = ReactAgent(llm, [ReactTool("boom", "boom", _boom)])
+        result = agent.run("task", _state())
+        assert "Error: kaboom" in result.steps[0].observation
+
+    def test_self_correction_after_precondition_error(self):
+        ready = {"v": False}
+
+        def setup(state, args):
+            ready["v"] = True
+            return "setup done"
+
+        def need(state, args):
+            return "ok" if ready["v"] else "Error: run setup first"
+
+        tools = [ReactTool("setup", "s", setup), ReactTool("need", "n", need)]
+        # need (error) → setup → need (ok) → final
+        llm = ScriptedLLM([_act("need"), _act("setup"), _act("need"), _final("done")])
+        result = ReactAgent(llm, tools).run("task", _state())
+        assert result.completed is True
+        assert "Error: run setup first" in result.steps[0].observation
+        assert result.steps[2].observation == "ok"
+
+    def test_invalid_json_observation(self):
+        llm = ScriptedLLM(["not json at all", _final("recovered")])
+        result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
+        assert "not valid JSON" in result.steps[0].observation
+        assert result.completed is True
+
+    def test_non_object_json(self):
+        llm = ScriptedLLM(["[1, 2, 3]", _final("ok")])
+        result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
+        assert "expected a JSON object" in result.steps[0].observation
+
+    def test_missing_action_and_final(self):
+        llm = ScriptedLLM([json.dumps({"thought": "hmm"}), _final("ok")])
+        result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
+        assert "provide 'action' or 'final_answer'" in result.steps[0].observation
+
+    def test_max_steps_exhausted(self):
+        # Never finishes → loop hits the budget.
+        llm = ScriptedLLM([_act("echo", x="loop")])
+        agent = ReactAgent(llm, [_echo_tool()], max_steps=3)
+        result = agent.run("task", _state())
+        assert result.completed is False
+        assert result.answer == ""
+        assert len(result.steps) == 3
+
+    def test_requires_configured_llm(self):
+        agent = ReactAgent(ScriptedLLM([_final("x")], configured=False), [_echo_tool()])
+        with pytest.raises(RuntimeError, match="requires a configured LLM"):
+            agent.run("task", _state())
+
+    def test_prompt_lists_tools_and_task(self):
+        llm = ScriptedLLM([_final("x")])
+        ReactAgent(llm, [_echo_tool()]).run("analyze this", _state())
+        assert "analyze this" in llm.prompts[0]
+        assert "echo" in llm.prompts[0]
+
+    def test_non_dict_action_input_ignored(self):
+        # action_input not a dict → treated as empty, tool still runs.
+        bad = json.dumps({"action": "echo", "action_input": "oops"})
+        llm = ScriptedLLM([bad, _final("done")])
+        result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
+        assert result.steps[0].observation == "echoed None"

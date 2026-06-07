@@ -1,55 +1,29 @@
 """
-Tool-call tracing for the agent.
+Trace rendering for the ReAct agent.
 
-Records one TraceEntry per AgentController.run — what task came in, which tool
-was selected (and why), how long it took, and whether it succeeded, failed, or
-matched no tool. This is the audit trail for debugging wrong tool selection and
-tool failures.
+The trajectory itself is just the ``list[ReactStep]`` the controller records.
+These helpers render it — for the model's scratchpad (fed back each step) and
+for serialization (logs / an API).
 """
 
-import time
+from dataclasses import asdict
 
-from dataclasses import asdict, dataclass, field
-
-# Status values a trace entry can take.
-STATUS_OK = "ok"
-STATUS_ERROR = "error"
-STATUS_NO_TOOL = "no_tool"
+from app.services.agent.schemas import ReactStep
 
 
-@dataclass
-class TraceEntry:
-    """A single recorded tool invocation."""
+def format_scratchpad(steps: list[ReactStep]) -> str:
+    """Render prior steps as a Thought/Action/Observation scratchpad."""
+    if not steps:
+        return ""
+    lines: list[str] = ["Steps so far:"]
+    for step in steps:
+        if step.action:
+            lines.append(f"Thought: {step.thought}")
+            lines.append(f"Action: {step.action} {step.action_input}")
+        lines.append(f"Observation: {step.observation}")
+    return "\n".join(lines)
 
-    task: str
-    tool: str | None
-    status: str  # STATUS_OK | STATUS_ERROR | STATUS_NO_TOOL
-    latency_ms: float
-    reason: str = ""
-    error: str = ""
-    output_type: str = ""
-    timestamp: float = field(default_factory=time.time)
 
-
-class Tracer:
-    """Collects TraceEntry records in memory."""
-
-    def __init__(self) -> None:
-        self.entries: list[TraceEntry] = []
-
-    def record(self, entry: TraceEntry) -> None:
-        """Append a trace entry."""
-        self.entries.append(entry)
-
-    def clear(self) -> None:
-        """Drop all recorded entries."""
-        self.entries.clear()
-
-    @property
-    def last(self) -> TraceEntry | None:
-        """The most recent entry, or None if nothing has been recorded."""
-        return self.entries[-1] if self.entries else None
-
-    def as_dicts(self) -> list[dict]:
-        """Serialize all entries to plain dicts (e.g. for an API or log)."""
-        return [asdict(entry) for entry in self.entries]
+def steps_as_dicts(steps: list[ReactStep]) -> list[dict]:
+    """Serialize steps to plain dicts (e.g. for logging or an API)."""
+    return [asdict(step) for step in steps]

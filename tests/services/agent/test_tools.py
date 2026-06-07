@@ -1,102 +1,109 @@
-"""Tests for the default agent tool set wired to real services."""
-import pytest
-
+"""Tests for the default ReAct tools over shared state."""
 from app.models.jd import JobDescription
-from app.models.resume import Resume, ResumeExperience, ResumeProject
-from app.models.match import MatchResult
-from app.models.audit import ProjectAuditReport
-from app.services.agent.controller import AgentContext
-from app.services.agent.tools import build_default_controller, default_tools
+from app.models.match import MatchReport
+from app.services.agent.react_controller import ReactAgent
+from app.services.agent.schemas import ReactState
+from app.services.agent.tools import build_default_agent, default_tools
+
+JD_TEXT = "ML Engineer at Acme\n\nRequirements:\n- Python\n- Docker"
+RESUME_TEXT = "Skills: Python\n\nExperience:\nML Engineer at Beta\n- Built models in Python"
 
 
-def _resume() -> Resume:
-    return Resume(
-        raw_text="...",
-        skills=["python", "rag"],
-        experience=[
-            ResumeExperience(
-                title="ML Engineer", company="Acme",
-                highlights=["Built a rag pipeline in python"],
-            )
-        ],
-        projects=[
-            ResumeProject(name="Search", description="vector search", technologies=["python"])
-        ],
-    )
+def _tools():
+    return {t.name: t for t in default_tools()}
 
 
-def _jd() -> JobDescription:
-    return JobDescription(raw_text="ML role", skills=["python", "rag"])
+def _state():
+    return ReactState(jd_text=JD_TEXT, resume_text=RESUME_TEXT)
 
 
-class TestDefaultToolSet:
+class TestToolSet:
     def test_has_expected_tools(self):
-        names = {t.name for t in default_tools()}
-        assert names == {
-            "jd_parser", "resume_parser", "resume_matcher",
-            "project_auditor", "project_ranker",
+        assert set(_tools()) == {
+            "parse_jd", "parse_resume", "match", "rank_projects",
+            "audit", "generate_report",
         }
 
-
-class TestRoutingAndExecution:
-    def test_jd_parsing_task(self):
-        c = build_default_controller()
-        result = c.run(AgentContext(task="analyze this job description", jd_text="Need Python and Docker."))
-        assert result.tool == "jd_parser"
-        assert isinstance(result.output, JobDescription)
-
-    def test_resume_parsing_task(self):
-        c = build_default_controller()
-        result = c.run(AgentContext(task="parse my resume", resume_text="Skills: Python"))
-        assert result.tool == "resume_parser"
-        assert isinstance(result.output, Resume)
-
-    def test_matching_task(self):
-        c = build_default_controller()
-        result = c.run(AgentContext(task="match my resume and score the fit", jd=_jd(), resume=_resume()))
-        assert result.tool == "resume_matcher"
-        assert isinstance(result.output, MatchResult)
-
-    def test_audit_task(self):
-        c = build_default_controller()
-        result = c.run(AgentContext(task="audit my resume for authenticity risk", resume=_resume()))
-        assert result.tool == "project_auditor"
-        assert isinstance(result.output, ProjectAuditReport)
-
-    def test_ranking_task(self):
-        c = build_default_controller()
-        result = c.run(AgentContext(task="rank my projects by relevance", jd=_jd(), resume=_resume()))
-        assert result.tool == "project_ranker"
-        assert isinstance(result.output, list)
+    def test_build_default_agent(self):
+        agent = build_default_agent(llm=object())
+        assert isinstance(agent, ReactAgent)
+        assert "parse_jd" in agent.tools
 
 
-class TestMissingInputs:
-    def test_jd_parser_requires_text(self):
-        c = build_default_controller()
-        with pytest.raises(ValueError, match="jd_text"):
-            c.run(AgentContext(task="analyze this jd"))
+class TestPreconditions:
+    def test_match_requires_jd(self):
+        obs = _tools()["match"].handler(ReactState(resume_text=RESUME_TEXT), {})
+        assert "parse the JD first" in obs
 
-    def test_resume_parser_requires_text(self):
-        c = build_default_controller()
-        with pytest.raises(ValueError, match="resume_text"):
-            c.run(AgentContext(task="parse my resume"))
+    def test_match_requires_resume(self):
+        state = ReactState()
+        _tools()["parse_jd"].handler(state, {"text": JD_TEXT})
+        obs = _tools()["match"].handler(state, {})
+        assert "parse the resume first" in obs
 
-    def test_matcher_requires_jd_and_resume(self):
-        c = build_default_controller()
-        with pytest.raises(ValueError, match="parsed jd"):
-            c.run(AgentContext(task="match and compare the fit", resume=_resume()))
+    def test_audit_requires_resume(self):
+        assert "parse the resume first" in _tools()["audit"].handler(ReactState(), {})
 
-    def test_matcher_requires_resume(self):
-        c = build_default_controller()
-        with pytest.raises(ValueError, match="parsed resume"):
-            c.run(AgentContext(task="match and compare the fit", jd=_jd()))
+    def test_report_requires_match(self):
+        assert "run match first" in _tools()["generate_report"].handler(ReactState(), {})
 
-    def test_auditor_requires_resume(self):
-        c = build_default_controller()
-        with pytest.raises(ValueError, match="parsed resume"):
-            c.run(AgentContext(task="audit for risk"))
+    def test_parse_jd_requires_text(self):
+        assert "no JD text" in _tools()["parse_jd"].handler(ReactState(), {})
 
-    def test_ranker_requires_jd(self):
-        c = build_default_controller()
-        with pytest.raises(ValueError, match="parsed jd"):
-            c.run(AgentContext(task="rank by relevance", resume=_resume()))
+    def test_parse_resume_requires_text(self):
+        assert "no resume text" in _tools()["parse_resume"].handler(ReactState(), {})
+
+
+class TestHappyPath:
+    def test_full_sequence(self):
+        tools = _tools()
+        state = _state()
+
+        assert "Parsed JD" in tools["parse_jd"].handler(state, {})
+        assert isinstance(state.jd, JobDescription)
+
+        assert "Parsed resume" in tools["parse_resume"].handler(state, {})
+        assert state.resume is not None
+
+        match_obs = tools["match"].handler(state, {})
+        assert "Match score" in match_obs
+        assert state.match is not None
+
+        rank_obs = tools["rank_projects"].handler(state, {})
+        assert "experiences" in rank_obs.lower() or "No relevant" in rank_obs
+
+        audit_obs = tools["audit"].handler(state, {})
+        assert audit_obs  # summary string
+
+        report_obs = tools["generate_report"].handler(state, {})
+        assert "Report generated" in report_obs
+        assert isinstance(state.report, MatchReport)
+
+    def test_parse_jd_with_explicit_text(self):
+        state = ReactState()
+        obs = _tools()["parse_jd"].handler(state, {"text": JD_TEXT})
+        assert "Parsed JD" in obs
+        assert "python" in state.jd.skills
+
+    def test_rank_requires_both(self):
+        assert "parse the JD and resume first" in _tools()["rank_projects"].handler(
+            ReactState(), {}
+        )
+
+    def test_rank_no_relevant_experiences(self):
+        from app.models.resume import Resume, ResumeExperience
+
+        state = ReactState(jd_text="Role\n\nRequirements:\n- Python")
+        tools = _tools()
+        tools["parse_jd"].handler(state, {})  # JD skill: python
+        state.resume = Resume(
+            raw_text="...",
+            experience=[
+                ResumeExperience(
+                    title="Chef", company="Kitchen",
+                    highlights=["Cooked pasta and salads"],
+                )
+            ],
+        )
+        obs = tools["rank_projects"].handler(state, {})
+        assert "No relevant experiences found." in obs
