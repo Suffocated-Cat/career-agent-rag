@@ -91,36 +91,43 @@ def test_pgvector_roundtrip_integration():
     except Exception:
         pytest.skip("database not available")
 
-    ensure_schema(conn)
-    vec = np.ones(EMBED_DIM, dtype=np.float64)
     import json
 
+    ensure_schema(conn)
+    vec = np.ones(EMBED_DIM, dtype=np.float64)
     rows = [
         ("test:int:mid", "mid sample", json.dumps({"difficulty": "mid"})),
         ("test:int:senior", "senior sample", json.dumps({"difficulty": "senior"})),
     ]
-    with conn.cursor() as cur:
-        for doc_id, text, meta in rows:
-            cur.execute(
-                "INSERT INTO knowledge_doc (doc_id, skill, doc_type, text, metadata, embedding) "
-                "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (doc_id) DO UPDATE SET "
-                "metadata = EXCLUDED.metadata, embedding = EXCLUDED.embedding",
-                (doc_id, "python", "question", text, meta, vec),
-            )
-    conn.commit()
-    conn.close()
 
     class _Emb:
         def encode(self, texts):
             return np.ones((len(texts), EMBED_DIM), dtype=np.float64)
 
-    retriever = PgVectorRetriever(_Emb())
+    try:
+        with conn.cursor() as cur:
+            for doc_id, text, meta in rows:
+                cur.execute(
+                    "INSERT INTO knowledge_doc (doc_id, skill, doc_type, text, metadata, embedding) "
+                    "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (doc_id) DO UPDATE SET "
+                    "metadata = EXCLUDED.metadata, embedding = EXCLUDED.embedding",
+                    (doc_id, "python", "question", text, meta, vec),
+                )
+        conn.commit()
 
-    # Unfiltered: both samples are retrievable.
-    texts = {r.text for r in retriever.search("anything", k=50)}
-    assert {"mid sample", "senior sample"} <= texts
+        retriever = PgVectorRetriever(_Emb())
 
-    # Metadata-filtered: only the mid-difficulty sample.
-    filtered = {r.text for r in retriever.search("anything", k=50, filters={"difficulty": "mid"})}
-    assert "mid sample" in filtered
-    assert "senior sample" not in filtered
+        # Unfiltered: both samples are retrievable.
+        texts = {r.text for r in retriever.search("anything", k=50)}
+        assert {"mid sample", "senior sample"} <= texts
+
+        # Metadata-filtered: only the mid-difficulty sample.
+        filtered = {r.text for r in retriever.search("anything", k=50, filters={"difficulty": "mid"})}
+        assert "mid sample" in filtered
+        assert "senior sample" not in filtered
+    finally:
+        # Never leave test rows in the database.
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM knowledge_doc WHERE doc_id LIKE 'test:%'")
+        conn.commit()
+        conn.close()

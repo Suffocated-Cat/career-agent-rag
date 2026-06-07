@@ -42,6 +42,28 @@ def _query(jd: JobDescription) -> str:
     return " ".join(jd.skills).strip() or jd.raw_text
 
 
+def _retrieve(kb_retriever, jd, filters, k, per_skill):
+    """Retrieve per-skill so each required skill is represented in the context.
+
+    A single combined query lets a few skills dominate the top-k and starves
+    the rest; instead we query each skill and take its top *per_skill*, then
+    dedupe and cap at *k*. Falls back to a combined query when the JD lists no
+    skills.
+    """
+    if not jd.skills:
+        return kb_retriever.search(_query(jd), k=k, filters=filters or None)
+
+    seen: set = set()
+    collected = []
+    for skill in jd.skills:
+        for r in kb_retriever.search(skill, k=per_skill, filters=filters or None):
+            if r.doc_id in seen:
+                continue
+            seen.add(r.doc_id)
+            collected.append(r)
+    return collected[:k]
+
+
 def _format_bank(items: list[tuple[str, str]]) -> str:
     """Render retrieved (question, answer_outline) pairs as a bank."""
     if not items:
@@ -83,6 +105,7 @@ def generate_interview_prep(
     k: int = 8,
     role: str | list[str] | None = None,
     difficulty: str | None = None,
+    per_skill: int = 2,
 ) -> InterviewPrep:
     """Generate grounded interview prep for a JD/resume from the KB.
 
@@ -111,7 +134,7 @@ def generate_interview_prep(
     if difficulty:
         filters["difficulty"] = difficulty
 
-    results = kb_retriever.search(_query(jd), k=k, filters=filters or None)
+    results = _retrieve(kb_retriever, jd, filters, k, per_skill)
     items = [(r.text, (r.metadata or {}).get("answer_outline", "")) for r in results]
     questions = [q for q, _ in items]
     bank = _format_bank(items)

@@ -54,6 +54,41 @@ class TestGenerateInterviewPrep:
         prep = generate_interview_prep(jd, resume, _kb())
         assert prep.gaps == []
 
+    def test_no_skills_uses_combined_query(self):
+        # With no JD skills, retrieval falls back to a combined raw_text query.
+        jd = JobDescription(raw_text="docker image layers and caching", skills=[])
+        resume = Resume(raw_text="x", skills=[])
+        prep = generate_interview_prep(jd, resume, _kb())
+        assert prep.gaps == []
+        assert any("docker" in q.lower() for q in prep.questions)
+
+    def test_dedup_across_skills(self):
+        from app.services.retrieval.base import RetrievalResult
+
+        class _FakeKb:
+            def search(self, query, k=10, filters=None):
+                table = {
+                    "a": [RetrievalResult(1, "shared", 1.0), RetrievalResult(2, "qa", 0.9)],
+                    "b": [RetrievalResult(1, "shared", 1.0), RetrievalResult(3, "qb", 0.9)],
+                }
+                return table.get(query, [])[:k]
+
+        jd = JobDescription(raw_text="x", skills=["a", "b"])
+        resume = Resume(raw_text="x", skills=[])
+        prep = generate_interview_prep(jd, resume, _FakeKb(), per_skill=2)
+        # doc_id 1 ("shared") retrieved for both skills but appears once.
+        assert prep.questions == ["shared", "qa", "qb"]
+
+    def test_per_skill_retrieval_covers_each_skill(self):
+        # A combined query lets common skills crowd out RAG; per-skill retrieval
+        # must surface both python and rag questions.
+        jd = JobDescription(raw_text="x", skills=["python", "docker", "rag"])
+        resume = Resume(raw_text="x", skills=[])
+        prep = generate_interview_prep(jd, resume, _kb(), per_skill=2)
+        texts = " ".join(prep.questions).lower()
+        assert "python" in texts
+        assert "rag" in texts
+
     def test_answer_outline_fed_into_prompt(self):
         captured = {}
 

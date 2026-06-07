@@ -14,7 +14,7 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 - Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
 - Frontend: minimal static UI served at `/ui/` (paste JD + resume → match report, or RAG interview prep with role/difficulty filters)
-- Tests: `423 passed` with Postgres up (`422 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
+- Tests: `428 passed` with Postgres up (`427 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -346,7 +346,7 @@ This is where retrieval-augmented *generation* actually happens. The other retri
 
 - **Store:** a curated interview-question / skill-note KB (`data/knowledge/`, ~145 docs across ~30 topics) lives in **PostgreSQL + pgvector**. Every entry carries `skill` / `type` plus `role` / `difficulty` / `tags` / `answer_outline`, which the loader puts into the `metadata` (`jsonb`) column (the loader treats these as optional, so bare entries still load). `scripts/ingest_kb.py` embeds each document and upserts it into `knowledge_doc` (`vector(384)`, GIN index on `metadata`).
 - **Retriever:** `PgVectorRetriever.search(query, k, filters=...)` implements the same `Retriever` interface but ranks DB-side with pgvector's cosine operator (`<=>`), and supports **metadata-filtered vector search** — scalar equality (`{"difficulty": "mid"}`) and jsonb array overlap (`{"role": ["backend"]}`) applied before ranking. That filtering + persistence is the concrete reason to use pgvector over an in-memory index. Because it's behind the `Retriever` protocol, the in-memory BM25/vector retriever is used for the offline test suite while pgvector backs production — a single integration test exercises the real DB (including a metadata filter) and self-skips when Postgres isn't available.
-- **Generation:** `interview_prep.generate_interview_prep(jd, resume, kb_retriever, llm, role=, difficulty=)` retrieves the questions relevant to the JD's skills — **optionally metadata-filtered by `role` / `difficulty`** — then asks the LLM to write a prep guide **grounded strictly on the retrieved questions and their `answer_outline`s**, highlighting the candidate's skill gaps. With no LLM it falls back to listing the retrieved questions (with outlines) + gaps. Exposed at `POST /api/v1/interview-prep` (which accepts optional `role` / `difficulty`).
+- **Generation:** `interview_prep.generate_interview_prep(jd, resume, kb_retriever, llm, role=, difficulty=)` retrieves **per JD skill** (each skill contributes its top results, deduped, so common skills don't crowd out the rest) — **optionally metadata-filtered by `role` / `difficulty`** — then asks the LLM to write a prep guide **grounded strictly on the retrieved questions and their `answer_outline`s**, highlighting the candidate's skill gaps. With no LLM it falls back to listing the retrieved questions (with outlines) + gaps. Exposed at `POST /api/v1/interview-prep` (which accepts optional `role` / `difficulty`).
 
 This keeps the architecture's invariant: retrieval and the structured match stay deterministic; the LLM only synthesizes over retrieved context, with a fallback.
 
