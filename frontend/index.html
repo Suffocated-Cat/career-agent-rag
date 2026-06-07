@@ -39,6 +39,17 @@
     .sev.high{color:var(--bad);} .sev.medium{color:var(--warn);} .sev.low{color:var(--muted);}
     pre { white-space:pre-wrap; background:#0b1220; border:1px solid var(--line); border-radius:8px;
       padding:14px; font:12px/1.55 ui-monospace, monospace; overflow-x:auto; }
+    .md h1 { font-size:18px; margin:14px 0 8px; }
+    .md h2 { font-size:15px; margin:14px 0 6px; color:var(--accent); }
+    .md h3 { font-size:12px; margin:10px 0 4px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .md p { margin:8px 0; }
+    .md ul { margin:6px 0; padding-left:20px; } .md li { margin:2px 0; }
+    .md table { border-collapse:collapse; width:100%; margin:8px 0; font-size:12px; }
+    .md th, .md td { border:1px solid var(--line); padding:5px 8px; text-align:left; }
+    .md th { background:#0b1220; }
+    .md code { background:#0b1220; padding:1px 4px; border-radius:4px; font:12px ui-monospace, monospace; }
+    .md hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
+    .md em { color:var(--muted); }
     .muted { color:var(--muted); } .err { color:var(--bad); }
     .hidden { display:none; }
     #results { display:grid; gap:20px; }
@@ -79,7 +90,7 @@
       </div>
       <div class="card"><h2>Most relevant experience</h2><div id="relevance"></div></div>
       <div class="card"><h2>Risk audit</h2><div id="audit"></div></div>
-      <div class="card"><h2>Report</h2><pre id="report"></pre></div>
+      <div class="card"><h2>Report</h2><div id="report" class="md"></div></div>
     </div>
   </main>
 
@@ -146,10 +157,52 @@
       html += (audit.findings || []).map((f) => `
         <div class="finding"><span class="sev ${f.severity}">${f.severity}</span>
         ${escapeHtml(f.subject)} — ${escapeHtml(f.detail)}</div>`).join("");
-      if (audit.advice) html += `<pre style="margin-top:10px;">${escapeHtml(audit.advice)}</pre>`;
+      if (audit.advice) html += `<div class="md" style="margin-top:10px;">${renderMarkdown(audit.advice)}</div>`;
       $("audit").innerHTML = html || '<span class="muted">No risks detected.</span>';
 
-      $("report").textContent = report.full_report || "";
+      $("report").innerHTML = renderMarkdown(report.full_report || "");
+    }
+
+    // Minimal Markdown → HTML for the subset the reports use (headings,
+    // bold/italic/code, lists, tables, rules). Input is HTML-escaped first.
+    function mdInline(text) {
+      return escapeHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*(.+?)\*/g, "<em>$1</em>");
+    }
+    function mdRow(line) {
+      return line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
+    }
+    function renderMarkdown(md) {
+      const lines = String(md).split("\n");
+      const isSep = (s) => s !== undefined && /^\s*\|?[\s:|-]*-{2,}[\s:|-]*$/.test(s);
+      let html = "", i = 0;
+      while (i < lines.length) {
+        const line = lines[i];
+        if (/^\s*$/.test(line)) { i++; continue; }
+        if (/^\s*-{3,}\s*$/.test(line)) { html += "<hr>"; i++; continue; }
+        const h = line.match(/^(#{1,6})\s+(.*)$/);
+        if (h) { const n = h[1].length; html += `<h${n}>${mdInline(h[2])}</h${n}>`; i++; continue; }
+        if (line.includes("|") && isSep(lines[i + 1])) {
+          const head = mdRow(line); i += 2; const rows = [];
+          while (i < lines.length && lines[i].includes("|") && !/^\s*$/.test(lines[i])) { rows.push(mdRow(lines[i])); i++; }
+          html += "<table><thead><tr>" + head.map((c) => `<th>${mdInline(c)}</th>`).join("") + "</tr></thead><tbody>";
+          html += rows.map((r) => "<tr>" + r.map((c) => `<td>${mdInline(c)}</td>`).join("") + "</tr>").join("");
+          html += "</tbody></table>"; continue;
+        }
+        if (/^\s*[-*]\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*[-*]\s+/, "")); i++; }
+          html += "<ul>" + items.map((it) => `<li>${mdInline(it)}</li>`).join("") + "</ul>"; continue;
+        }
+        const para = [];
+        while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^\s*#{1,6}\s/.test(lines[i]) &&
+               !/^\s*-{3,}\s*$/.test(lines[i]) && !/^\s*[-*]\s+/.test(lines[i]) &&
+               !(lines[i].includes("|") && isSep(lines[i + 1]))) { para.push(lines[i]); i++; }
+        html += `<p>${mdInline(para.join(" "))}</p>`;
+      }
+      return html;
     }
 
     function escapeHtml(s) {
