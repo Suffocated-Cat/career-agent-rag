@@ -23,6 +23,33 @@ def test_kb_retriever_off_topic_returns_nothing():
     assert retriever.search("zzz_nonexistent_topic", k=3) == []
 
 
+def test_kb_results_carry_metadata():
+    retriever = build_inmemory_kb_retriever()
+    results = retriever.search("fastapi pydantic validation", k=3)
+    assert results
+    assert results[0].metadata.get("skill")
+    assert results[0].metadata.get("difficulty")
+
+
+def test_kb_retriever_metadata_filter():
+    retriever = build_inmemory_kb_retriever()
+    # Query overlaps frontend docs; the role filter keeps only frontend ones.
+    results = retriever.search(
+        "react components props state rendering in the browser",
+        k=10,
+        filters={"role": ["frontend"]},
+    )
+    assert results
+    assert all("frontend" in r.metadata.get("role", []) for r in results)
+
+
+def test_kb_retriever_difficulty_filter():
+    retriever = build_inmemory_kb_retriever()
+    results = retriever.search("design and debugging", k=10, filters={"difficulty": "senior"})
+    assert results
+    assert all(r.metadata.get("difficulty") == "senior" for r in results)
+
+
 def test_enriched_fields_carried_into_metadata():
     docs = {d.id: d for d in load_kb_documents()}
     fa = docs["fastapi:q1"]

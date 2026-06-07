@@ -53,3 +53,32 @@ class TestGenerateInterviewPrep:
         resume = Resume(raw_text="x", skills=["Python"])  # case-insensitive
         prep = generate_interview_prep(jd, resume, _kb())
         assert prep.gaps == []
+
+    def test_answer_outline_fed_into_prompt(self):
+        captured = {}
+
+        class _RecordingLLM:
+            def is_configured(self):
+                return True
+
+            def complete(self, prompt, system=None, **kwargs):
+                captured["prompt"] = prompt
+                return "guide"
+
+        jd = JobDescription(raw_text="x", skills=["fastapi"])
+        resume = Resume(raw_text="x", skills=[])
+        generate_interview_prep(jd, resume, _kb(), llm=_RecordingLLM())
+        # The retrieved questions' answer outlines must reach the prompt.
+        assert "a strong answer covers:" in captured["prompt"]
+
+    def test_role_difficulty_filter_applied(self):
+        jd = JobDescription(raw_text="x", skills=["fastapi", "docker", "rag"])
+        resume = Resume(raw_text="x", skills=[])
+        prep = generate_interview_prep(
+            jd, resume, _kb(), k=10, role="frontend", difficulty="junior"
+        )
+        # Filtered to frontend/junior, so backend/AI questions are excluded;
+        # there are no frontend questions matching these skills → empty bank.
+        assert prep.questions == []
+        # Gaps are still computed regardless of the filter.
+        assert prep.gaps == ["fastapi", "docker", "rag"]

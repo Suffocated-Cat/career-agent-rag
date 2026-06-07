@@ -53,11 +53,14 @@ class RetrievalResult:
         score: Relevance score for the query (higher is more relevant).
                Scale depends on the backend (BM25 is unbounded, vector
                similarity is roughly 0–1).
+        metadata: Source metadata when the backend has it (e.g. the KB's
+               skill/role/difficulty/answer_outline); empty otherwise.
     """
 
     doc_id: int
     text: str
     score: float
+    metadata: dict = field(default_factory=dict)
 
 
 @runtime_checkable

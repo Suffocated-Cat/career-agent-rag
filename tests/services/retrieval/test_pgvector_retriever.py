@@ -43,7 +43,10 @@ class _FakeConn:
 
 class TestSearchUnit:
     def test_returns_results_from_db(self, monkeypatch):
-        conn = _FakeConn([(1, "docker question", 0.91), (2, "python question", 0.80)])
+        conn = _FakeConn([
+            (1, "docker question", {"skill": "docker"}, 0.91),
+            (2, "python question", {"skill": "python"}, 0.80),
+        ])
         monkeypatch.setattr("app.db.connection.get_connection", lambda dsn=None: conn)
 
         retriever = PgVectorRetriever(_FakeEmbed())
@@ -53,6 +56,7 @@ class TestSearchUnit:
         assert [r.doc_id for r in results] == [1, 2]
         assert results[0].text == "docker question"
         assert results[0].score == 0.91
+        assert results[0].metadata == {"skill": "docker"}  # metadata carried through
         assert conn.closed  # connection is closed
 
     def test_no_embedding_service_returns_empty(self):
@@ -62,7 +66,7 @@ class TestSearchUnit:
         assert PgVectorRetriever(_FakeEmbed()).search("   ") == []
 
     def test_filters_build_metadata_predicates(self, monkeypatch):
-        conn = _FakeConn([(1, "t", 0.9)])
+        conn = _FakeConn([(1, "t", {}, 0.9)])
         monkeypatch.setattr("app.db.connection.get_connection", lambda dsn=None: conn)
 
         PgVectorRetriever(_FakeEmbed()).search(

@@ -14,6 +14,8 @@ class InterviewPrepRequest(BaseModel):
 
     jd_text: str = Field(..., min_length=1, description="Raw job description text")
     resume_text: str = Field(..., min_length=1, description="Raw resume text")
+    role: list[str] | None = Field(default=None, description="Target role(s) to filter the KB")
+    difficulty: str | None = Field(default=None, description="Target difficulty to filter the KB")
 
 
 class InterviewPrepResponse(BaseModel):
@@ -35,5 +37,12 @@ async def interview_prep_endpoint(request: InterviewPrepRequest):
     llm = deps.get_llm()
     jd = parse_jd(request.jd_text, embedding_service=embedding_service, llm=llm)
     resume = parse_resume(request.resume_text, embedding_service=embedding_service, llm=llm)
-    prep = generate_interview_prep(jd, resume, deps.get_kb_retriever(), llm=llm)
+    prep = generate_interview_prep(
+        jd,
+        resume,
+        deps.get_kb_retriever(),
+        llm=llm,
+        role=request.role,
+        difficulty=request.difficulty,
+    )
     return InterviewPrepResponse(data=prep)

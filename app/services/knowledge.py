@@ -17,6 +17,7 @@ from pathlib import Path
 
 from app.services.retrieval.base import (
     RetrievalDocument,
+    RetrievalResult,
     Retriever,
     document_texts,
 )
@@ -61,11 +62,56 @@ def load_kb_documents(path: str | Path | None = None) -> list[RetrievalDocument]
     return docs
 
 
+def _metadata_matches(metadata: dict, filters: dict) -> bool:
+    """True if *metadata* satisfies all *filters* (scalar = equality, list = overlap)."""
+    for key, value in filters.items():
+        actual = metadata.get(key)
+        if isinstance(value, (list, tuple)):
+            actual_set = set(actual) if isinstance(actual, (list, tuple)) else {actual}
+            if not (set(value) & actual_set):
+                return False
+        elif actual != value:
+            return False
+    return True
+
+
+class KbRetriever:
+    """In-memory KB retriever that carries metadata and supports filtering.
+
+    Wraps a base text retriever (BM25/vector) plus the source documents, so
+    results expose ``metadata`` and metadata filters can be applied (filter
+    then rank) — mirroring ``PgVectorRetriever`` behind the same interface.
+    """
+
+    def __init__(self, docs: list[RetrievalDocument], base: Retriever):
+        self.docs = docs
+        self.base = base
+
+    def search(
+        self, query: str, k: int = 10, filters: dict | None = None
+    ) -> list[RetrievalResult]:
+        ranked = self.base.search(query, k=len(self.docs))
+        out: list[RetrievalResult] = []
+        for r in ranked:
+            doc = self.docs[r.doc_id]
+            if filters and not _metadata_matches(doc.metadata, filters):
+                continue
+            out.append(
+                RetrievalResult(
+                    doc_id=r.doc_id, text=doc.text, score=r.score, metadata=doc.metadata
+                )
+            )
+            if len(out) >= k:
+                break
+        return out
+
+
 def build_inmemory_kb_retriever(
     embedding_service=None,
     path: str | Path | None = None,
-) -> Retriever:
-    """Build an in-memory retriever over the KB (vector if embeddings, else BM25)."""
+) -> KbRetriever:
+    """Build an in-memory KB retriever (vector if embeddings, else BM25)."""
     docs = load_kb_documents(path)
     method = "vector" if embedding_service is not None else "bm25"
-    return build_retriever(method, document_texts(docs), embedding_service=embedding_service)
+    base = build_retriever(method, document_texts(docs), embedding_service=embedding_service)
+    return KbRetriever(docs, base)

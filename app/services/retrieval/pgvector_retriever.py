@@ -77,7 +77,7 @@ class PgVectorRetriever:
                 filter_params += [key, str(value)]
 
         sql = (
-            f"SELECT id, text, 1 - (embedding <=> %s) AS score "
+            f"SELECT id, text, metadata, 1 - (embedding <=> %s) AS score "
             f"FROM {self.table} WHERE {' AND '.join(where)} "
             f"ORDER BY embedding <=> %s LIMIT %s"
         )
@@ -92,6 +92,8 @@ class PgVectorRetriever:
             conn.close()
 
         return [
-            RetrievalResult(doc_id=row[0], text=row[1], score=float(row[2]))
+            RetrievalResult(
+                doc_id=row[0], text=row[1], metadata=row[2] or {}, score=float(row[3])
+            )
             for row in rows
         ]
