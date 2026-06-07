@@ -10,6 +10,16 @@ def test_get_llm_builds_client():
     deps.get_llm.cache_clear()
 
 
+def test_get_kb_retriever_builds(monkeypatch):
+    """get_kb_retriever builds a PgVectorRetriever (no DB at construction)."""
+    from app.services.retrieval.pgvector_retriever import PgVectorRetriever
+
+    monkeypatch.setattr(deps, "get_embedding_service", lambda: None)
+    deps.get_kb_retriever.cache_clear()
+    assert isinstance(deps.get_kb_retriever(), PgVectorRetriever)
+    deps.get_kb_retriever.cache_clear()
+
+
 def test_get_embedding_service_success(monkeypatch):
     monkeypatch.setattr(deps, "EmbeddingService", lambda: "EMB")
     deps.get_embedding_service.cache_clear()

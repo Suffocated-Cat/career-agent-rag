@@ -10,4 +10,22 @@ services:
       - .:/app
     env_file:
       - .env
+    depends_on:
+      - db
     restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: career-agent-db
+    environment:
+      POSTGRES_USER: career
+      POSTGRES_PASSWORD: career
+      POSTGRES_DB: career
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:

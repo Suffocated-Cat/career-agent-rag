@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # CORS (allowed origins for the browser frontend)
     CORS_ORIGINS: list[str] = ["*"]
 
+    # Database (PostgreSQL + pgvector) for the knowledge base
+    DATABASE_URL: str = "postgresql://career:career@db:5432/career"
+
     # Embedding model
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
     EMBEDDING_DEVICE: str = "cpu"

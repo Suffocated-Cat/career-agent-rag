@@ -11,9 +11,10 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 - Agent: ReAct loop (Reason → Act → Observe) that calls the tools, with step tracing
 - LLM: optional OpenAI-compatible client with deterministic fallback
 - MCP: stdio server exposing the core tools
+- Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
 - Frontend: minimal static UI served at `/ui/` (paste JD + resume → report)
-- Tests: `398 passed`, `97%` coverage in Docker on Python 3.11.15
+- Tests: `413 passed`, `97%` coverage in Docker on Python 3.11.15 (1 DB integration test skipped without Postgres)
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -23,7 +24,8 @@ Docker is the recommended way to run the project because the app targets Python 
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up --build          # starts the backend + a pgvector Postgres
+docker compose exec backend python -m scripts.ingest_kb   # load the knowledge base
 ```
 
 The API will be available at:
@@ -96,7 +98,8 @@ career-agent-rag/
 │   │       ├── resume.py    # POST /api/v1/resume/parse
 │   │       ├── match.py     # POST /api/v1/match, /api/v1/match/report
 │   │       ├── audit.py     # POST /api/v1/audit
-│   │       └── career.py    # POST /api/v1/career-match (end-to-end)
+│   │       ├── career.py    # POST /api/v1/career-match (end-to-end)
+│   │       └── interview.py # POST /api/v1/interview-prep (RAG)
 │   ├── models/              # Pydantic data schemas
 │   │   ├── jd.py
 │   │   ├── resume.py
@@ -116,6 +119,8 @@ career-agent-rag/
 │   │   ├── llm_client.py         # LLMClient (OpenAI-compatible chat wrapper)
 │   │   ├── llm_support.py        # LLM helpers w/ deterministic fallback + schema validation
 │   │   ├── usage.py              # TokenUsage / UsageTracker / estimate_cost
+│   │   ├── knowledge.py          # KB loading + in-memory KB retriever
+│   │   ├── interview_prep.py     # RAG interview prep (retrieve KB → grounded guide)
 │   │   ├── agent/               # ReAct agent
 │   │   │   ├── react_controller.py # ReactAgent (Thought→Action→Observation loop)
 │   │   │   ├── tools.py            # Default ReAct tools over shared state
@@ -127,7 +132,10 @@ career-agent-rag/
 │   │       ├── vector_retriever.py # VectorRetriever (embedding, semantic recall)
 │   │       ├── hybrid_retriever.py # HybridRetriever (RRF / weighted fusion)
 │   │       ├── reranker.py         # Reranker + RerankingRetriever (cross-encoder)
-│   │       └── factory.py          # build_retriever(method, ...) ablation switch
+│   │       ├── factory.py          # build_retriever(method, ...) ablation switch
+│   │       └── pgvector_retriever.py # PgVectorRetriever (KB search via pgvector)
+│   ├── db/                    # PostgreSQL + pgvector
+│   │   └── connection.py        # connection + knowledge_doc schema
 │   ├── mcp/                   # MCP server + client
 │   │   ├── tools.py             # MCP tool implementations (dict in/out)
 │   │   ├── server.py            # FastMCP server exposing the tools
@@ -155,7 +163,10 @@ career-agent-rag/
 │   │       ├── test_resume.py
 │   │       ├── test_match.py
 │   │       ├── test_audit.py
-│   │       └── test_career.py
+│   │       ├── test_career.py
+│   │       └── test_interview.py
+│   ├── db/
+│   │   └── test_connection.py       # schema helper (fake conn)
 │   ├── fixtures/            # Evaluation dataset
 │   │   ├── retrieval_documents.json # Pooled resume corpus (with stable ids)
 │   │   ├── relevance_queries.json   # Queries + graded relevance labels
@@ -185,6 +196,8 @@ career-agent-rag/
 │       ├── test_llm_client.py
 │       ├── test_llm_support.py
 │       ├── test_usage.py
+│       ├── test_knowledge.py
+│       ├── test_interview_prep.py
 │       ├── agent/
 │       │   ├── test_react.py
 │       │   ├── test_tools.py
@@ -194,7 +207,10 @@ career-agent-rag/
 │           ├── test_vector_retriever.py
 │           ├── test_hybrid_retriever.py
 │           ├── test_reranker.py
-│           └── test_factory.py
+│           ├── test_factory.py
+│           └── test_pgvector_retriever.py
+├── data/knowledge/          # Curated KB (interview_questions.json)
+├── scripts/                 # ingest_kb.py (embed + upsert KB into pgvector)
 ├── frontend/                # Minimal static UI (index.html)
 ├── experiments/             # Standalone experiment scripts
 │   ├── day1_embedding_demo.py
@@ -219,6 +235,7 @@ career-agent-rag/
 | POST | `/api/v1/match/report` | Generate matching report (incl. risk audit) |
 | POST | `/api/v1/audit` | Audit a resume for authenticity / quality risks |
 | POST | `/api/v1/career-match` | End-to-end: parse + match + rank + audit + report from raw text |
+| POST | `/api/v1/interview-prep` | RAG: retrieve interview questions from the KB + grounded prep guide |
 | GET | `/ui/` | Minimal browser UI |
 
 Swagger docs: `http://localhost:8000/docs`
@@ -322,6 +339,16 @@ async with MCPClient() as client:
 ```
 
 It decodes JSON tool output to dicts/lists and raises `MCPToolError` when the server reports a failed call.
+
+## Knowledge base & RAG
+
+This is where retrieval-augmented *generation* actually happens. The other retrieval in the project ranks the resume's own items; here the LLM's output is **grounded on documents retrieved from an external knowledge base**.
+
+- **Store:** a curated interview-question / skill-note KB (`data/knowledge/`) lives in **PostgreSQL + pgvector**. `scripts/ingest_kb.py` embeds each document and upserts it into the `knowledge_doc` table (`vector(384)`).
+- **Retriever:** `PgVectorRetriever` implements the same `search(query, k)` interface as the in-memory retrievers but ranks DB-side with pgvector's cosine operator (`<=>`). Because it's behind the `Retriever` protocol, the in-memory BM25/vector retriever is used for the offline test suite while pgvector backs production — a single integration test exercises the real DB and self-skips when Postgres isn't available.
+- **Generation:** `interview_prep.generate_interview_prep(jd, resume, kb_retriever, llm)` retrieves the questions relevant to the JD's skills, then asks the LLM to write a prep guide **grounded strictly on the retrieved questions**, highlighting the candidate's skill gaps. With no LLM it falls back to listing the retrieved questions + gaps. Exposed at `POST /api/v1/interview-prep`.
+
+This keeps the architecture's invariant: retrieval and the structured match stay deterministic; the LLM only synthesizes over retrieved context, with a fallback.
 
 ## Skill
 

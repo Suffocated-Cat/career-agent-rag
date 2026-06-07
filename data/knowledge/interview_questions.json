@@ -1,0 +1,33 @@
+[
+  {"id": "python:q1", "skill": "python", "type": "question", "text": "Explain Python's GIL and how it affects multithreaded CPU-bound vs I/O-bound work."},
+  {"id": "python:q2", "skill": "python", "type": "question", "text": "When would you use a generator over a list, and what are the memory implications?"},
+  {"id": "python:note", "skill": "python", "type": "note", "text": "Python interviews assess idiomatic code, data structures, generators/iterators, the GIL and concurrency model, and testing habits."},
+
+  {"id": "docker:q1", "skill": "docker", "type": "question", "text": "What is the difference between a Docker image and a container, and how do layers affect build caching?"},
+  {"id": "docker:q2", "skill": "docker", "type": "question", "text": "How would you reduce the size of a Python service image and speed up rebuilds?"},
+  {"id": "docker:note", "skill": "docker", "type": "note", "text": "Docker interviews cover image vs container, layer caching, multi-stage builds, and reproducible environments."},
+
+  {"id": "kubernetes:q1", "skill": "kubernetes", "type": "question", "text": "Explain the role of a Deployment, a Service, and a Pod, and how rolling updates work."},
+  {"id": "kubernetes:q2", "skill": "kubernetes", "type": "question", "text": "How do liveness and readiness probes differ, and why does it matter for zero-downtime deploys?"},
+  {"id": "kubernetes:note", "skill": "kubernetes", "type": "note", "text": "Kubernetes interviews cover Pods/Deployments/Services, probes, rollouts, and resource limits."},
+
+  {"id": "rag:q1", "skill": "rag", "type": "question", "text": "Walk through a RAG pipeline end to end and explain where hallucinations can still occur."},
+  {"id": "rag:q2", "skill": "rag", "type": "question", "text": "How do you evaluate retrieval quality, and which metrics (Recall@k, MRR, nDCG) would you report?"},
+  {"id": "rag:note", "skill": "rag", "type": "note", "text": "RAG interviews cover chunking, embeddings, hybrid retrieval, reranking, grounding, and evaluation."},
+
+  {"id": "pytorch:q1", "skill": "pytorch", "type": "question", "text": "Explain autograd and what happens during loss.backward() and optimizer.step()."},
+  {"id": "pytorch:q2", "skill": "pytorch", "type": "question", "text": "How do you debug a model that trains but does not converge?"},
+  {"id": "pytorch:note", "skill": "pytorch", "type": "note", "text": "PyTorch interviews cover tensors, autograd, training loops, overfitting/regularization, and debugging."},
+
+  {"id": "fastapi:q1", "skill": "fastapi", "type": "question", "text": "How does FastAPI use Pydantic for validation, and how do dependencies (Depends) work?"},
+  {"id": "fastapi:q2", "skill": "fastapi", "type": "question", "text": "How would you structure error handling so all responses share a consistent shape?"},
+  {"id": "fastapi:note", "skill": "fastapi", "type": "note", "text": "FastAPI interviews cover Pydantic models, dependency injection, async handlers, and error handling."},
+
+  {"id": "sql:q1", "skill": "sql", "type": "question", "text": "Explain the difference between an INNER JOIN and a LEFT JOIN with an example."},
+  {"id": "sql:q2", "skill": "sql", "type": "question", "text": "When would you add an index, and what are the trade-offs on writes?"},
+  {"id": "sql:note", "skill": "sql", "type": "note", "text": "SQL interviews cover joins, indexing, query plans, and normalization vs denormalization."},
+
+  {"id": "system_design:q1", "skill": "system design", "type": "question", "text": "Design a service that matches resumes to jobs at scale — outline retrieval, ranking, and caching."},
+  {"id": "system_design:q2", "skill": "system design", "type": "question", "text": "How would you add a vector database to an existing system, and what consistency/latency trade-offs arise?"},
+  {"id": "system_design:note", "skill": "system design", "type": "note", "text": "System design interviews assess requirements gathering, data flow, scaling, caching, and trade-off reasoning."}
+]

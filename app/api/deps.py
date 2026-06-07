@@ -25,3 +25,11 @@ def get_embedding_service() -> EmbeddingService | None:
 def get_llm() -> LLMClient:
     """Create the LLM client once. Unconfigured → deterministic fallbacks apply."""
     return LLMClient()
+
+
+@lru_cache(maxsize=1)
+def get_kb_retriever():
+    """Knowledge-base retriever (pgvector), sharing the embedding service."""
+    from app.services.retrieval.pgvector_retriever import PgVectorRetriever
+
+    return PgVectorRetriever(get_embedding_service())
