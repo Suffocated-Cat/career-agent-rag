@@ -12,7 +12,6 @@ Run as a stdio MCP server:
 """
 
 from functools import lru_cache
-from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 

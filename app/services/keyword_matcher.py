@@ -152,9 +152,6 @@ def match(
     total_jd = len(jd_skills)
     skill_match_rate = len(all_matched) / total_jd if total_jd > 0 else 0.0
 
-    direct_score = len(matched) / total_jd if total_jd > 0 else 0.0
-    extended_bonus = len(extended_matches) / total_jd if total_jd > 0 else 0.0
-
     semantic_similarity: float | None = None
     doc_semantic_bonus = 0.0
 

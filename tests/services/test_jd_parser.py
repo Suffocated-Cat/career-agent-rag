@@ -1,7 +1,6 @@
 """
 Tests for JDParser — rule-based job description parsing.
 """
-import pytest
 from app.services.jd_parser import parse_jd
 
 

@@ -1,5 +1,4 @@
 """Tests for VectorMatcher — embedding-based semantic matching."""
-import pytest
 import numpy as np
 
 from app.services.vector_matcher import (

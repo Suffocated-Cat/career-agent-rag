@@ -1,10 +1,8 @@
 """Tests for ReportGenerator — template-based matching report generation."""
-import pytest
 from app.models.jd import JobDescription
 from app.models.resume import Resume, ResumeExperience, ResumeProject
 from app.models.match import (
     MatchResult,
-    MatchReport,
     SkillMatchDetail,
     ExperienceMatchDetail,
 )

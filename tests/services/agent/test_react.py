@@ -4,12 +4,7 @@ import json
 import pytest
 
 from app.services.agent.react_controller import ReactAgent
-from app.services.agent.schemas import (
-    ReactResult,
-    ReactState,
-    ReactStep,
-    ReactTool,
-)
+from app.services.agent.schemas import ReactResult, ReactState, ReactTool
 
 
 class ScriptedLLM:
