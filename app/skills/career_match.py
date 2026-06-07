@@ -20,9 +20,7 @@ from app.models.resume import Resume
 from app.models.match import MatchResult, MatchReport
 from app.services.jd_parser import parse_jd
 from app.services.resume_parser import parse_resume
-from app.services.keyword_matcher import match as match_jd_resume
-from app.services.match_pipeline import rank_resume_projects
-from app.services.project_auditor import audit_resume
+from app.services.match_pipeline import analyze_match
 from app.services.report_generator import generate_report
 
 from typing import TYPE_CHECKING
@@ -64,13 +62,9 @@ def run_career_match(
     jd = parse_jd(jd_text, embedding_service=embedding_service, llm=llm)
     resume = parse_resume(resume_text, embedding_service=embedding_service, llm=llm)
 
-    result = match_jd_resume(jd, resume, embedding_service=embedding_service)
-
-    method = "hybrid" if embedding_service is not None else "bm25"
-    result.project_relevance = rank_resume_projects(
-        jd, resume, embedding_service=embedding_service, method=method
+    result = analyze_match(
+        jd, resume, embedding_service=embedding_service, audit_llm=llm
     )
-    result.project_audit = audit_resume(resume, llm=llm)
 
     report = generate_report(jd, resume, result, llm=llm)
     return CareerMatchResult(jd=jd, resume=resume, match=result, report=report)
@@ -79,6 +73,8 @@ def run_career_match(
 def main() -> None:  # pragma: no cover
     """CLI: `python -m app.skills.career_match --jd JD.txt --resume RESUME.txt`."""
     import argparse
+
+    from pathlib import Path
 
     from app.services.embedding import EmbeddingService
     from app.services.llm_client import LLMClient
@@ -89,8 +85,8 @@ def main() -> None:  # pragma: no cover
     parser.add_argument("--no-llm", action="store_true", help="Disable LLM enhancement.")
     args = parser.parse_args()
 
-    jd_text = open(args.jd, encoding="utf-8").read()
-    resume_text = open(args.resume, encoding="utf-8").read()
+    jd_text = Path(args.jd).read_text(encoding="utf-8")
+    resume_text = Path(args.resume).read_text(encoding="utf-8")
 
     try:
         embeddings = EmbeddingService()

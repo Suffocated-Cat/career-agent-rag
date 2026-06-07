@@ -14,7 +14,7 @@ def test_audit_returns_200(client, monkeypatch):
     """POST /api/v1/audit should return a risk report."""
     # Unconfigured LLM → no advice, offline.
     monkeypatch.setattr(
-        "app.api.v1.audit._get_llm", lambda: _FakeAuditLLM(configured=False)
+        "app.api.deps.get_llm", lambda: _FakeAuditLLM(configured=False)
     )
     response = client.post(
         "/api/v1/audit",
@@ -72,7 +72,7 @@ def test_audit_clean_resume_low_risk(client):
 def test_audit_includes_advice_when_llm_configured(client, monkeypatch):
     """With an LLM configured, the audit returns how-to-fix advice."""
     monkeypatch.setattr(
-        "app.api.v1.audit._get_llm",
+        "app.api.deps.get_llm",
         lambda: _FakeAuditLLM(reply="Add metrics and link a repo."),
     )
     response = client.post(

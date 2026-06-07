@@ -81,6 +81,7 @@ career-agent-rag/
 │   ├── api/
 │   │   ├── router.py        # Route aggregator
 │   │   ├── errors.py        # Consistent {status, error} exception handlers
+│   │   ├── deps.py          # Shared lazy singletons (embedding service, LLM)
 │   │   └── v1/              # API v1 endpoints
 │   │       ├── jd.py        # POST /api/v1/jd/parse
 │   │       ├── resume.py    # POST /api/v1/resume/parse
@@ -139,6 +140,7 @@ career-agent-rag/
 │   ├── test_health.py
 │   ├── api/
 │   │   ├── test_errors.py
+│   │   ├── test_deps.py
 │   │   └── v1/
 │   │       ├── test_jd.py
 │   │       ├── test_resume.py

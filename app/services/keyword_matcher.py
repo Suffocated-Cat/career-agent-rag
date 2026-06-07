@@ -26,6 +26,20 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.services.embedding import EmbeddingService
 
+# ── Overall-score weights (skill-coverage-first) ────────────────────────
+# Skill coverage is the primary signal; the rest are supporting context.
+# Each branch's weights sum to 1.0.
+#
+# With experience-alignment signal available:
+W_SKILL_WITH_EXP: float = 0.75       # skill coverage
+W_EXPERIENCE: float = 0.15           # JD-responsibility ↔ experience alignment
+W_DOC_SIM_WITH_EXP: float = 0.10     # document-level semantic similarity
+# Without experience signal (skills + document similarity only):
+W_SKILL_NO_EXP: float = 0.85
+W_DOC_SIM_NO_EXP: float = 0.15
+# Keyword-only mode (no embeddings): reserve headroom for absent signals.
+W_SKILL_KEYWORD_ONLY: float = 0.90
+
 
 def _find_skills_in_text(skills: list[str], candidate_text: str) -> set[str]:
     """Find missing skills in raw text using the shared skill matcher."""
@@ -161,18 +175,21 @@ def match(
         if has_experience_signal:
             experience_score = experience_match_rate or 0.0
             overall_score = (
-                0.75 * skill_match_rate
-                + 0.15 * experience_score
-                + 0.10 * doc_semantic_bonus
+                W_SKILL_WITH_EXP * skill_match_rate
+                + W_EXPERIENCE * experience_score
+                + W_DOC_SIM_WITH_EXP * doc_semantic_bonus
             )
         else:
-            overall_score = 0.85 * skill_match_rate + 0.15 * doc_semantic_bonus
+            overall_score = (
+                W_SKILL_NO_EXP * skill_match_rate
+                + W_DOC_SIM_NO_EXP * doc_semantic_bonus
+            )
     else:
         # ── Keyword-only scoring ────────────────────────────────────
         # Keep a small reserve for semantic/context signals that are not
         # available in keyword-only mode, while making full skill coverage
         # score high enough to read as a strong baseline match.
-        overall_score = 0.90 * skill_match_rate
+        overall_score = W_SKILL_KEYWORD_ONLY * skill_match_rate
 
     overall_score = min(overall_score, 1.0)
 

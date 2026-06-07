@@ -130,16 +130,6 @@ def test_match_response_includes_project_audit(client):
     assert 0.0 <= audit["risk_score"] <= 1.0
 
 
-def test_get_llm_builds_client():
-    """_get_llm constructs a real LLMClient (offline; no network on build)."""
-    from app.api.v1.match import _get_llm
-    from app.services.llm_client import LLMClient
-
-    _get_llm.cache_clear()
-    assert isinstance(_get_llm(), LLMClient)
-    _get_llm.cache_clear()
-
-
 class _FakeReportLLM:
     """Fake LLMClient for the report endpoint (no network)."""
 
@@ -158,7 +148,7 @@ def test_generate_report_returns_200(client, monkeypatch):
     """POST /api/v1/match/report should return 200 with valid report schema."""
     # Unconfigured LLM → deterministic template report (offline, stable).
     monkeypatch.setattr(
-        "app.api.v1.match._get_llm", lambda: _FakeReportLLM(configured=False)
+        "app.api.deps.get_llm", lambda: _FakeReportLLM(configured=False)
     )
     response = client.post(
         "/api/v1/match/report",
@@ -212,7 +202,7 @@ def test_generate_report_returns_200(client, monkeypatch):
 def test_report_uses_llm_when_configured(client, monkeypatch):
     """When the LLM is configured, the endpoint returns the LLM-generated report."""
     monkeypatch.setattr(
-        "app.api.v1.match._get_llm",
+        "app.api.deps.get_llm",
         lambda: _FakeReportLLM(reply="# AI Report\nGrounded narrative."),
     )
     response = client.post(

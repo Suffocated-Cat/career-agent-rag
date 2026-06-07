@@ -13,7 +13,7 @@ class _FakeLLM:
 def test_parse_jd_returns_200(client, monkeypatch):
     """POST /api/v1/jd/parse should return 200 with valid response schema."""
     # Unconfigured LLM → deterministic rule-based parsing (offline).
-    monkeypatch.setattr("app.api.v1.jd._get_llm", lambda: _FakeLLM(configured=False))
+    monkeypatch.setattr("app.api.deps.get_llm", lambda: _FakeLLM(configured=False))
     response = client.post(
         "/api/v1/jd/parse",
         json={"raw_text": "Looking for a Python developer with 3+ years experience."},
@@ -30,7 +30,7 @@ def test_parse_jd_returns_200(client, monkeypatch):
 def test_parse_jd_uses_llm_when_configured(client, monkeypatch):
     """When the LLM is configured, the endpoint returns LLM-extracted fields."""
     reply = '{"title": "Staff Engineer", "company": "Acme", "skills": ["Go"], "responsibilities": [], "nice_to_haves": []}'
-    monkeypatch.setattr("app.api.v1.jd._get_llm", lambda: _FakeLLM(reply=reply))
+    monkeypatch.setattr("app.api.deps.get_llm", lambda: _FakeLLM(reply=reply))
     response = client.post("/api/v1/jd/parse", json={"raw_text": "some jd text"})
 
     assert response.status_code == 200
@@ -45,13 +45,3 @@ def test_parse_jd_empty_text_rejected(client):
     response = client.post("/api/v1/jd/parse", json={"raw_text": ""})
 
     assert response.status_code == 422
-
-
-def test_get_llm_builds_client():
-    """_get_llm constructs a real LLMClient (offline; no network on build)."""
-    from app.api.v1.jd import _get_llm
-    from app.services.llm_client import LLMClient
-
-    _get_llm.cache_clear()
-    assert isinstance(_get_llm(), LLMClient)
-    _get_llm.cache_clear()

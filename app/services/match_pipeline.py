@@ -13,7 +13,9 @@ The retrieval method is selectable ("bm25" / "vector" / "hybrid" /
 
 from app.models.jd import JobDescription
 from app.models.resume import Resume
-from app.models.match import ProjectRelevance
+from app.models.match import MatchResult, ProjectRelevance
+from app.services.keyword_matcher import match as match_jd_resume
+from app.services.project_auditor import audit_resume
 from app.services.retrieval.base import (
     RetrievalDocument,
     corpus_from_resume,
@@ -26,6 +28,39 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.services.embedding import EmbeddingService
+    from app.services.llm_client import LLMClient
+
+
+def analyze_match(
+    jd: JobDescription,
+    resume: Resume,
+    embedding_service: "EmbeddingService | None" = None,
+    audit_llm: "LLMClient | None" = None,
+) -> MatchResult:
+    """Run the full deterministic match analysis for a JD and resume.
+
+    Produces a MatchResult with skill/semantic scoring, project relevance
+    ranking, and the authenticity audit attached. This is the single
+    orchestration point shared by the ``/match`` endpoint and the career-match
+    skill, so they can't drift apart.
+
+    Args:
+        jd: Parsed job description.
+        resume: Parsed resume.
+        embedding_service: Enables semantic matching + hybrid ranking.
+        audit_llm: Optional LLM for risk advice in the audit (kept off the
+            hot ``/match`` path; supplied by the standalone skill).
+
+    Returns:
+        A populated MatchResult.
+    """
+    result = match_jd_resume(jd, resume, embedding_service=embedding_service)
+    method = "hybrid" if embedding_service is not None else "bm25"
+    result.project_relevance = rank_resume_projects(
+        jd, resume, embedding_service=embedding_service, method=method
+    )
+    result.project_audit = audit_resume(resume, llm=audit_llm)
+    return result
 
 
 def build_jd_query(jd: JobDescription) -> str:
