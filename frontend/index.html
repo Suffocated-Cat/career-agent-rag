@@ -41,6 +41,8 @@
       padding:14px; font:12px/1.55 ui-monospace, monospace; overflow-x:auto; }
     .muted { color:var(--muted); } .err { color:var(--bad); }
     .hidden { display:none; }
+    #results { display:grid; gap:20px; }
+    #results.hidden { display:none; }
   </style>
 </head>
 <body>
@@ -65,7 +67,7 @@
       <span id="status" class="muted" style="margin-left:12px;"></span>
     </div>
 
-    <div id="results" class="hidden" style="display:grid; gap:20px;">
+    <div id="results" class="hidden">
       <div class="card">
         <h2>Overall</h2>
         <div class="score" id="score">–</div>
