@@ -53,6 +53,7 @@ class ReactState:
     interview: Any | None = None  # InterviewPrep, kept loose to avoid a service import
     jd_inputs: list[JdInput] = field(default_factory=list)  # candidate JDs to compare
     comparison: list[JdComparison] = field(default_factory=list)  # ranked, best first
+    conversation: str | None = None  # prior-turn context (summary + recent turns) for chat
     embedding_service: Any | None = None
     kb_retriever: Any | None = None  # knowledge-base retriever for RAG tools
     llm: Any | None = None

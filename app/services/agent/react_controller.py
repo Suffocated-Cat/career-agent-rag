@@ -87,6 +87,8 @@ class ReactAgent:
     def _prompt(self, task: str, steps: list[ReactStep], state: ReactState) -> str:
         """Render task, working-memory summary, tool catalog, and scratchpad."""
         lines = [f"Task: {task}"]
+        if state.conversation:
+            lines += ["", "Conversation so far:", state.conversation]
         summary = _state_summary(state)
         if summary:
             lines += ["", f"Working memory: {summary}."]

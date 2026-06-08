@@ -170,6 +170,13 @@ class TestReactLoop:
         assert "ask_user requires" in result.steps[0].observation
         assert result.completed is True
 
+    def test_conversation_injected_into_prompt(self):
+        llm = ScriptedLLM([_final("x")])
+        state = ReactState(conversation="User: hi\nAssistant: hello")
+        ReactAgent(llm, [_echo_tool()]).run("task", state)
+        assert "Conversation so far:" in llm.prompts[0]
+        assert "User: hi" in llm.prompts[0]
+
     def test_non_dict_action_input_ignored(self):
         # action_input not a dict → treated as empty, tool still runs.
         bad = json.dumps({"action": "echo", "action_input": "oops"})

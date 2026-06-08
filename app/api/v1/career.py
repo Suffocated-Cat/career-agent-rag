@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.api import deps
 from app.services.agent.schemas import JdInput, ReactState
-from app.services.agent.sessions import ChatMessage
+from app.services.agent.sessions import ChatMessage, conversation_context, fold_old_turns
 from app.services.agent.slash import is_slash, handle_slash
 from app.services.agent.tools import build_default_agent
 from app.services.agent.trace import steps_as_dicts
@@ -214,6 +214,8 @@ async def career_chat_endpoint(request: ChatRequest):
 
     message = request.message.strip()
     session.history.append(ChatMessage(role="user", content=message))
+    # Recent turns (verbatim) + rolling summary of older ones, for the agent.
+    session.state.conversation = conversation_context(session) or None
 
     steps: list[dict] = []
     if session.awaiting_user:
@@ -239,6 +241,7 @@ async def career_chat_endpoint(request: ChatRequest):
         reply, status = _resolve(result, session, task=message)
 
     session.history.append(ChatMessage(role="assistant", content=reply))
+    fold_old_turns(session, deps.get_llm())  # condense anything beyond the recent window
     return ChatResponse(
         session_id=session.session_id,
         reply=reply,

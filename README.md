@@ -14,7 +14,7 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 - Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
 - Frontend: minimal static chat UI served at `/ui/` — paste a resume + one or more JDs, then chat with the agent (free text) or use slash commands (`/match`, `/report`, `/prep`, `/audit`, `/compare`), with the reasoning trace expandable per reply
-- Tests: `476 passed` with Postgres up (`475 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
+- Tests: `486 passed` with Postgres up (`485 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -125,7 +125,7 @@ career-agent-rag/
 │   │   │   ├── react_controller.py # ReactAgent (Thought→Action→Observation loop, ask_user pause/resume)
 │   │   │   ├── tools.py            # Default ReAct tools over shared state (parse/match/rank/audit/report + kb_search/interview_prep/advise/rewrite_bullet + compare_jds/select_jd)
 │   │   │   ├── slash.py            # Deterministic slash commands (/match, /report, /prep, /audit, /compare)
-│   │   │   ├── sessions.py         # In-memory chat sessions (persistent ReactState + history)
+│   │   │   ├── sessions.py         # In-memory chat sessions (persistent ReactState + history + rolling summary)
 │   │   │   ├── schemas.py          # ReactState / ReactTool / ReactStep / ReactResult / ReactDecision
 │   │   │   └── trace.py            # Scratchpad rendering + step serialization
 │   │   └── retrieval/            # Retrieval backends (shared interface)
@@ -204,6 +204,7 @@ career-agent-rag/
 │       │   ├── test_react.py
 │       │   ├── test_tools.py
 │       │   ├── test_slash.py
+│       │   ├── test_sessions.py
 │       │   └── test_trace.py
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
@@ -310,6 +311,8 @@ This is surfaced as `POST /api/v1/career/ask` (`{question, resume_text, jd_text}
 ### Conversational chat (`/career/chat`)
 
 `POST /api/v1/career/chat` turns the agent into a multi-turn assistant. A process-local session (`sessions.py`) holds the **persistent `ReactState`** — so parsing/matching done on one turn (by a tool *or* a slash command) is reused on the next instead of recomputed — plus the conversation history. The first turn seeds the resume/JD(s) and returns a `session_id`; later turns send just the id and a message.
+
+**Conversation memory** is two-tier so the agent can follow back-references ("why that one?") without the context growing unbounded: the **last 3 rounds** are passed verbatim, and **older turns are folded into a rolling LLM summary** (`fold_old_turns`, with a bounded plain-text fallback when no LLM is configured). The summary plus recent turns are injected into the agent's prompt as a `Conversation so far:` block — separate from the structured working-memory summary (parsed JD/resume/match), which the agent already had.
 
 Two input styles share that one session state:
 
