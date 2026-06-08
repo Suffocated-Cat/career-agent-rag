@@ -8,13 +8,13 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 
 - Backend: FastAPI service with versioned APIs under `/api/v1`
 - Retrieval: BM25, vector, hybrid fusion, and optional reranking
-- Agent: ReAct loop (Reason → Act → Observe) that calls the tools, with step tracing
+- Agent: ReAct loop (Reason → Act → Observe) over the tools (incl. KB search, advice, bullet rewriting), with step tracing; exposed for open-ended Q&A at `POST /api/v1/career/ask`
 - LLM: optional OpenAI-compatible client with deterministic fallback
 - MCP: stdio server exposing the core tools
 - Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
 - Frontend: minimal static UI served at `/ui/` (paste JD + resume → match report, or RAG interview prep with role/difficulty filters)
-- Tests: `428 passed` with Postgres up (`427 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
+- Tests: `443 passed` with Postgres up (`442 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -98,7 +98,7 @@ career-agent-rag/
 │   │       ├── resume.py    # POST /api/v1/resume/parse
 │   │       ├── match.py     # POST /api/v1/match, /api/v1/match/report
 │   │       ├── audit.py     # POST /api/v1/audit
-│   │       ├── career.py    # POST /api/v1/career-match (end-to-end)
+│   │       ├── career.py    # POST /api/v1/career-match (end-to-end), /api/v1/career/ask (ReAct agent)
 │   │       └── interview.py # POST /api/v1/interview-prep (RAG)
 │   ├── models/              # Pydantic data schemas
 │   │   ├── jd.py
@@ -123,7 +123,7 @@ career-agent-rag/
 │   │   ├── interview_prep.py     # RAG interview prep (retrieve KB → grounded guide)
 │   │   ├── agent/               # ReAct agent
 │   │   │   ├── react_controller.py # ReactAgent (Thought→Action→Observation loop)
-│   │   │   ├── tools.py            # Default ReAct tools over shared state
+│   │   │   ├── tools.py            # Default ReAct tools over shared state (parse/match/rank/audit/report + kb_search/interview_prep/advise/rewrite_bullet)
 │   │   │   ├── schemas.py          # ReactState / ReactTool / ReactStep / ReactResult / ReactDecision
 │   │   │   └── trace.py            # Scratchpad rendering + step serialization
 │   │   └── retrieval/            # Retrieval backends (shared interface)
@@ -235,6 +235,7 @@ career-agent-rag/
 | POST | `/api/v1/match/report` | Generate matching report (incl. risk audit) |
 | POST | `/api/v1/audit` | Audit a resume for authenticity / quality risks |
 | POST | `/api/v1/career-match` | End-to-end: parse + match + rank + audit + report from raw text |
+| POST | `/api/v1/career/ask` | Open-ended Q&A: the ReAct agent picks tools dynamically; returns answer + reasoning trace |
 | POST | `/api/v1/interview-prep` | RAG: retrieve interview questions from the KB + grounded prep guide |
 | GET | `/ui/` | Minimal browser UI |
 
@@ -291,10 +292,14 @@ This gives the Week-3 LLM a structured starting point for risk analysis instead 
 
 `app/services/agent/` is a **ReAct agent** (`ReactAgent`): instead of routing a task to a single tool, it runs a Reason→Act→Observe loop. At each step the LLM emits a thought and either an action (tool call) or a final answer; the tool runs, its observation is fed back, and the loop continues until the LLM finishes or a step budget is hit.
 
-- `build_default_agent(llm)` wires the services as ReAct tools — `parse_jd`, `parse_resume`, `match`, `rank_projects`, `audit`, `generate_report`.
+- `build_default_agent(llm)` wires the services as ReAct tools — `parse_jd`, `parse_resume`, `match`, `rank_projects`, `audit`, `generate_report`, plus the agentic extensions `kb_search`, `interview_prep`, `advise`, and `rewrite_bullet`.
 - Tools operate on a shared `ReactState` (working memory), so the model passes only small inputs and reads concise observations rather than echoing large objects between steps.
 - Tool preconditions surface as error observations (e.g. "parse the JD first"), which the agent reasons about and recovers from — genuine self-correction.
 - `run(task, state)` returns a `ReactResult` with the final answer, the recorded `steps` (thought/action/observation), and whether it completed within the budget.
+
+Where the deterministic `/career-match` pipeline always runs the *same* fixed steps, the agent shines on **open-ended, branch-by-result** tasks where the path isn't known up front — e.g. *"why isn't my match higher, and how do I fix it?"* The agent diagnoses (`match` / `audit` / `rank_projects`), then decides what to do about it: `kb_search` to pull background on a missing skill (looping one query per gap), `advise` for targeted recommendations grounded on the diagnosis, or `rewrite_bullet` to retarget a resume line — and it can fold interview prep (`interview_prep`, RAG over the KB) into the same loop. The KB-backed tools degrade gracefully when no knowledge base or LLM is available.
+
+This is surfaced as `POST /api/v1/career/ask` (`{question, jd_text, resume_text}` → `{answer, completed, steps}`): the endpoint seeds a `ReactState` (embedding service, KB retriever, LLM) and returns the agent's answer plus its full Thought/Action/Observation trace for transparency. The deterministic endpoints stay untouched — the agent is an additional entry point for free-form questions, not a replacement for the fixed pipeline.
 
 The agent is LLM-driven by design (it requires a configured LLM); decisions are parsed as strict JSON via the same `extract_json` helper, and a malformed/unknown reply becomes a recoverable observation rather than a crash. Note the deterministic-core invariant still holds: the tools call the same services, so scores/rankings/findings are computed deterministically — the LLM only decides *which* steps to take.
 

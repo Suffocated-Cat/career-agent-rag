@@ -27,7 +27,9 @@ class ReactState:
     resume: Resume | None = None
     match: MatchResult | None = None
     report: MatchReport | None = None
+    interview: Any | None = None  # InterviewPrep, kept loose to avoid a service import
     embedding_service: Any | None = None
+    kb_retriever: Any | None = None  # knowledge-base retriever for RAG tools
     llm: Any | None = None
 
 

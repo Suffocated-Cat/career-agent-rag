@@ -5,6 +5,42 @@ from app.services.agent.react_controller import ReactAgent
 from app.services.agent.schemas import ReactState
 from app.services.agent.tools import build_default_agent, default_tools
 
+
+class FakeLLM:
+    """Configured LLM that echoes a canned reply (for advice/rewrite tools)."""
+
+    def __init__(self, reply="LLM OUTPUT"):
+        self.reply = reply
+
+    def is_configured(self):
+        return True
+
+    def complete(self, prompt, system=None, **kwargs):
+        return self.reply
+
+
+class FakeHit:
+    def __init__(self, text, doc_id=0, metadata=None):
+        self.text = text
+        self.doc_id = doc_id
+        self.metadata = metadata or {}
+
+
+class FakeKb:
+    """Records search calls and returns canned hits."""
+
+    def __init__(self, hits=None):
+        self.hits = (
+            hits
+            if hits is not None
+            else [FakeHit("How does X work?", doc_id=1)]
+        )
+        self.calls = []
+
+    def search(self, query, k=10, filters=None):
+        self.calls.append({"query": query, "k": k, "filters": filters})
+        return self.hits[:k]
+
 JD_TEXT = "ML Engineer at Acme\n\nRequirements:\n- Python\n- Docker"
 RESUME_TEXT = "Skills: Python\n\nExperience:\nML Engineer at Beta\n- Built models in Python"
 
@@ -22,6 +58,7 @@ class TestToolSet:
         assert set(_tools()) == {
             "parse_jd", "parse_resume", "match", "rank_projects",
             "audit", "generate_report",
+            "kb_search", "interview_prep", "advise", "rewrite_bullet",
         }
 
     def test_build_default_agent(self):
@@ -107,3 +144,87 @@ class TestHappyPath:
         )
         obs = tools["rank_projects"].handler(state, {})
         assert "No relevant experiences found." in obs
+
+
+class TestKbSearch:
+    def test_requires_query(self):
+        obs = _tools()["kb_search"].handler(ReactState(kb_retriever=FakeKb()), {})
+        assert "provide action_input.query" in obs
+
+    def test_requires_retriever(self):
+        obs = _tools()["kb_search"].handler(ReactState(), {"query": "python"})
+        assert "knowledge base not available" in obs
+
+    def test_returns_hits_and_passes_filters(self):
+        kb = FakeKb([FakeHit("Explain RAG"), FakeHit("Explain embeddings")])
+        state = ReactState(kb_retriever=kb)
+        obs = _tools()["kb_search"].handler(
+            state, {"query": "rag", "role": "ML", "difficulty": "hard", "k": 2}
+        )
+        assert "Explain RAG" in obs
+        assert kb.calls[0]["filters"] == {"role": "ML", "difficulty": "hard"}
+        assert kb.calls[0]["k"] == 2
+
+    def test_no_results(self):
+        state = ReactState(kb_retriever=FakeKb(hits=[]))
+        assert _tools()["kb_search"].handler(state, {"query": "x"}) == "No KB results."
+
+
+class TestInterviewPrep:
+    def test_requires_jd_and_resume(self):
+        obs = _tools()["interview_prep"].handler(ReactState(kb_retriever=FakeKb()), {})
+        assert "parse the JD and resume first" in obs
+
+    def test_requires_retriever(self):
+        state = _state()
+        tools = _tools()
+        tools["parse_jd"].handler(state, {})
+        tools["parse_resume"].handler(state, {})
+        assert "knowledge base not available" in tools["interview_prep"].handler(state, {})
+
+    def test_generates_prep(self):
+        state = ReactState(jd_text=JD_TEXT, resume_text=RESUME_TEXT, kb_retriever=FakeKb())
+        tools = _tools()
+        tools["parse_jd"].handler(state, {})
+        tools["parse_resume"].handler(state, {})
+        obs = tools["interview_prep"].handler(state, {})
+        assert "Interview prep ready" in obs
+        assert state.interview is not None
+
+
+class TestAdvise:
+    def test_requires_match(self):
+        assert "run match first" in _tools()["advise"].handler(ReactState(), {})
+
+    def test_uses_llm_grounded_on_diagnosis(self):
+        state = ReactState(jd_text=JD_TEXT, resume_text=RESUME_TEXT, llm=FakeLLM("ADVICE"))
+        tools = _tools()
+        tools["parse_jd"].handler(state, {})
+        tools["parse_resume"].handler(state, {})
+        tools["match"].handler(state, {})
+        assert tools["advise"].handler(state, {"focus": "docker"}) == "ADVICE"
+
+    def test_fallback_without_llm(self):
+        state = _state()
+        tools = _tools()
+        tools["parse_jd"].handler(state, {})
+        tools["parse_resume"].handler(state, {})
+        tools["match"].handler(state, {})
+        obs = tools["advise"].handler(state, {})
+        assert "Prioritize the missing skills" in obs
+
+
+class TestRewriteBullet:
+    def test_requires_text(self):
+        assert "provide action_input.text" in _tools()["rewrite_bullet"].handler(
+            ReactState(), {}
+        )
+
+    def test_rewrites_with_llm(self):
+        state = ReactState(llm=FakeLLM("STRONGER BULLET"))
+        obs = _tools()["rewrite_bullet"].handler(state, {"text": "did stuff"})
+        assert obs == "STRONGER BULLET"
+
+    def test_fallback_returns_original(self):
+        obs = _tools()["rewrite_bullet"].handler(ReactState(), {"text": "did stuff"})
+        assert obs == "did stuff"

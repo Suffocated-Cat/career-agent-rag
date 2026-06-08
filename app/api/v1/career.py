@@ -2,6 +2,9 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.api import deps
+from app.services.agent.schemas import ReactState
+from app.services.agent.tools import build_default_agent
+from app.services.agent.trace import steps_as_dicts
 from app.skills.career_match import CareerMatchResult, run_career_match
 
 router = APIRouter()
@@ -35,3 +38,54 @@ async def career_match_endpoint(request: CareerMatchRequest):
         llm=deps.get_llm(),
     )
     return CareerMatchResponse(data=result)
+
+
+class CareerAskRequest(BaseModel):
+    """An open-ended question over a JD + resume, answered by the ReAct agent."""
+
+    question: str = Field(..., min_length=1, description="The user's question")
+    jd_text: str = Field(..., min_length=1, description="Raw job description text")
+    resume_text: str = Field(..., min_length=1, description="Raw resume text")
+    max_steps: int = Field(8, ge=1, le=16, description="Agent step budget")
+
+
+class CareerAskResponse(BaseModel):
+    """The agent's answer plus its reasoning trace."""
+
+    status: str = "success"
+    answer: str
+    completed: bool
+    steps: list[dict]
+
+
+def _kb_retriever_or_none():
+    """Build the KB retriever, tolerating an unavailable store (no DB, etc.)."""
+    try:
+        return deps.get_kb_retriever()
+    except Exception:
+        return None
+
+
+@router.post("/career/ask", response_model=CareerAskResponse)
+async def career_ask_endpoint(request: CareerAskRequest):
+    """Answer an open-ended career question by driving the ReAct agent.
+
+    Unlike ``/career-match`` (a fixed pipeline), the agent decides which tools to
+    call — diagnosing, retrieving from the KB, advising, or rewriting — based on
+    the question and intermediate results. Returns the answer and the full
+    Thought/Action/Observation trace for transparency.
+    """
+    state = ReactState(
+        jd_text=request.jd_text,
+        resume_text=request.resume_text,
+        embedding_service=deps.get_embedding_service(),
+        kb_retriever=_kb_retriever_or_none(),
+        llm=deps.get_llm(),
+    )
+    agent = build_default_agent(deps.get_llm(), max_steps=request.max_steps)
+    result = agent.run(request.question, state)
+    return CareerAskResponse(
+        answer=result.answer,
+        completed=result.completed,
+        steps=steps_as_dicts(result.steps),
+    )
