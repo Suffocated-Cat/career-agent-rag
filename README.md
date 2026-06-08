@@ -8,13 +8,13 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 
 - Backend: FastAPI service with versioned APIs under `/api/v1`
 - Retrieval: BM25, vector, hybrid fusion, and optional reranking
-- Agent: ReAct loop (Reason → Act → Observe) over the tools (incl. KB search, advice, bullet rewriting, multi-JD comparison), with step tracing and an `ask_user` pause/resume action; exposed for one-shot Q&A (`POST /api/v1/career/ask`) and a multi-turn chat with persistent state + slash commands (`POST /api/v1/career/chat`)
+- Agent: ReAct loop (Reason → Act → Observe) over the tools (incl. KB search, advice, bullet rewriting, multi-JD comparison), with step tracing and an `ask_user` pause/resume action; exposed for one-shot Q&A (`POST /api/v1/career/ask`) and a streamed multi-turn chat with persistent state + slash commands (`POST /api/v1/career/chat/stream`)
 - LLM: optional OpenAI-compatible client with deterministic fallback
 - MCP: stdio server exposing the core tools
 - Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
-- Frontend: minimal static chat UI served at `/ui/` — paste a resume + one or more JDs, then chat with the agent (free text, streamed live) or use slash commands with autocomplete (`/match`, `/report`, `/prep`, `/audit`, `/compare`), with the reasoning trace expandable per reply
-- Tests: `491 passed` with Postgres up (`490 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
+- Frontend: minimal static chat UI served at `/ui/` — paste a resume + one or more JDs, then chat with the agent (free text; reasoning steps stream in live and the answer types out token-by-token) or use slash commands with autocomplete (`/match`, `/report`, `/prep`, `/audit`, `/compare`), with the reasoning trace expandable per reply
+- Tests: `488 passed` with Postgres up (`487 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -98,7 +98,7 @@ career-agent-rag/
 │   │       ├── resume.py    # POST /api/v1/resume/parse
 │   │       ├── match.py     # POST /api/v1/match, /api/v1/match/report
 │   │       ├── audit.py     # POST /api/v1/audit
-│   │       ├── career.py    # POST /api/v1/career-match (end-to-end), /career/ask (agent), /career/chat (multi-turn)
+│   │       ├── career.py    # POST /api/v1/career-match (end-to-end), /career/ask (agent), /career/chat/stream (multi-turn SSE)
 │   │       └── interview.py # POST /api/v1/interview-prep (RAG)
 │   ├── models/              # Pydantic data schemas
 │   │   ├── jd.py
@@ -240,8 +240,7 @@ career-agent-rag/
 | POST | `/api/v1/audit` | Audit a resume for authenticity / quality risks |
 | POST | `/api/v1/career-match` | End-to-end: parse + match + rank + audit + report from raw text |
 | POST | `/api/v1/career/ask` | One-shot Q&A over a resume + one or more JDs: the ReAct agent picks tools dynamically (incl. multi-JD comparison); returns answer + reasoning trace |
-| POST | `/api/v1/career/chat` | Multi-turn chat: persistent session (parsed JD/resume/match + history), slash commands for the deterministic pipeline, and an agent that can pause to ask the user (`awaiting_user`) and resume |
-| POST | `/api/v1/career/chat/stream` | Same as `/career/chat` but Server-Sent Events: a `step` event per ReAct step (live reasoning), then a final `done` event |
+| POST | `/api/v1/career/chat/stream` | Multi-turn chat over Server-Sent Events: persistent session (parsed JD/resume/match + rolling history), slash commands for the deterministic pipeline, and an agent that can pause to ask the user (`awaiting_user`) and resume. Emits a `step` event per ReAct step, then the answer as `token` events, then `done` |
 | POST | `/api/v1/interview-prep` | RAG: retrieve interview questions from the KB + grounded prep guide |
 | GET | `/ui/` | Minimal browser UI |
 
@@ -309,9 +308,9 @@ For **multi-JD** questions (*"which of these roles should I apply to?"*), the ag
 
 This is surfaced as `POST /api/v1/career/ask` (`{question, resume_text, jd_text}` or `{question, resume_text, jds: [{text, label}]}` → `{answer, completed, steps}`): the endpoint seeds a `ReactState` (candidate JDs, embedding service, KB retriever, LLM) and returns the agent's answer plus its full Thought/Action/Observation trace for transparency. The deterministic endpoints stay untouched — the agent is an additional entry point for free-form questions, not a replacement for the fixed pipeline.
 
-### Conversational chat (`/career/chat`)
+### Conversational chat (`/career/chat/stream`)
 
-`POST /api/v1/career/chat` turns the agent into a multi-turn assistant. A process-local session (`sessions.py`) holds the **persistent `ReactState`** — so parsing/matching done on one turn (by a tool *or* a slash command) is reused on the next instead of recomputed — plus the conversation history. The first turn seeds the resume/JD(s) and returns a `session_id`; later turns send just the id and a message.
+`POST /api/v1/career/chat/stream` turns the agent into a multi-turn assistant, streamed over Server-Sent Events. A process-local session (`sessions.py`) holds the **persistent `ReactState`** — so parsing/matching done on one turn (by a tool *or* a slash command) is reused on the next instead of recomputed — plus the conversation history. The first turn seeds the resume/JD(s) and returns a `session_id`; later turns send just the id and a message.
 
 **Conversation memory** is two-tier so the agent can follow back-references ("why that one?") without the context growing unbounded: the **last 3 rounds** are passed verbatim, and **older turns are folded into a rolling LLM summary** (`fold_old_turns`, with a bounded plain-text fallback when no LLM is configured). The summary plus recent turns are injected into the agent's prompt as a `Conversation so far:` block — separate from the structured working-memory summary (parsed JD/resume/match), which the agent already had.
 
@@ -320,7 +319,7 @@ Two input styles share that one session state:
 - **Slash commands** (`slash.py`) — `/match`, `/report`, `/prep [role] [difficulty]`, `/audit`, `/compare`, `/help` — call the **deterministic pipeline directly**. They're cheap, reproducible, and work even with no LLM configured. This keeps the deterministic-core invariant visible in the product: shortcuts for the fixed analyses, the agent for everything open-ended.
 - **Free text** drives the **ReAct agent**, which can now also emit an `ask_user` action: it **pauses** mid-loop (`state == "awaiting_user"`, returning the question), and the next user message **resumes** the same run with the reply folded in as the observation. This is what makes genuinely interactive flows possible — mock-interview follow-ups, or rewriting a resume bullet after asking the user for the missing metric — rather than one-shot answers.
 
-The response carries `{session_id, reply, state, steps, history}`, so the UI renders the conversation and an expandable reasoning trace per agent turn. `POST /api/v1/career/chat/stream` is the streaming variant (`ReactAgent.iter_run` yields each step): it emits a Server-Sent `step` event as each ReAct step completes — so the chat UI shows the agent thinking live — then a final `done` event. The static chat UI uses the streaming endpoint and offers slash-command autocomplete.
+**Streaming** is two-phase. The agent gathers via tools, then signals it's ready with a `finish` action — it does *not* write the user-facing answer in the decision JSON. Instead the answer is **composed in a separate step** that streams token-by-token (`ReactAgent.iter_run` yields each step for live `step` events; `stream_answer` streams the composed reply as `token` events; then a `done` event carries the full reply, state, session id, and history). Splitting "decide to finish" from "write the answer" is what lets the reply stream like a typing assistant while keeping the per-step reasoning visible. The static chat UI consumes this stream — reasoning steps appear live, the answer types out — and offers slash-command autocomplete.
 
 The agent is LLM-driven by design (it requires a configured LLM); decisions are parsed as strict JSON via the same `extract_json` helper, and a malformed/unknown reply becomes a recoverable observation rather than a crash. Note the deterministic-core invariant still holds: the tools call the same services, so scores/rankings/findings are computed deterministically — the LLM only decides *which* steps to take.
 

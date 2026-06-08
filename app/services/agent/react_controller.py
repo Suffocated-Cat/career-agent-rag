@@ -40,12 +40,19 @@ _SYSTEM = (
     "only they can provide (e.g. missing metrics for a resume bullet, or their "
     "answer in a mock interview) — don't use it for things the tools can find, "
     "or:\n"
-    '  {"thought": "...", "final_answer": "..."}\n'
-    "when the task is complete. Use only the listed tools. If an observation "
-    "reports an error, reason about it and recover. The JD(s) and resume are "
-    "already loaded in working memory — call the tools (which read it) to parse "
-    "and analyze them; do NOT ask the user for inputs that are already loaded. "
-    "Output JSON only."
+    '  {"thought": "...", "action": "finish"}\n'
+    "when you have gathered everything needed (the user-facing answer is written "
+    "in a separate step, so do NOT put it here). Use only the listed tools. If an "
+    "observation reports an error, reason about it and recover. The JD(s) and "
+    "resume are already loaded in working memory — call the tools (which read it) "
+    "to parse and analyze them; do NOT ask the user for inputs that are already "
+    "loaded. Output JSON only."
+)
+
+_COMPOSE_SYSTEM = (
+    "You are a career assistant. Write the final answer to the user based on the "
+    "steps already taken and their observations. Be concrete and helpful, ground "
+    "every claim in the observations, and do not invent facts. Use Markdown."
 )
 
 
@@ -109,15 +116,39 @@ class ReactAgent:
     ) -> ReactResult:
         """Run the ReAct loop to completion, returning the final ReactResult.
 
-        A thin wrapper over :meth:`iter_run` that drains the per-step stream and
-        returns its result. See ``iter_run`` for the loop semantics.
+        A thin wrapper over :meth:`iter_run` that drains the per-step stream,
+        then composes the final answer (unless the run paused on ask_user).
+        See ``iter_run`` for the loop semantics.
         """
         gen = self.iter_run(task, state, steps)
+        result = None
         try:
             while True:
                 next(gen)
         except StopIteration as stop:
-            return stop.value
+            result = stop.value
+        if result.pending_question is None:
+            result.answer = self.compose(task, state, result.steps)
+        return result
+
+    def _compose_prompt(self, task: str, steps: list[ReactStep], state: ReactState) -> str:
+        lines = [f"User request: {task}"]
+        if state.conversation:
+            lines += ["", "Conversation so far:", state.conversation]
+        scratchpad = format_scratchpad(steps)
+        if scratchpad:
+            lines += ["", scratchpad]
+        lines += ["", "Write a clear, helpful answer to the user's request, grounded in the observations above."]
+        return "\n".join(lines)
+
+    def compose(self, task: str, state: ReactState, steps: list[ReactStep]) -> str:
+        """Compose the final user-facing answer from the gathered observations."""
+        text = self.llm.complete(self._compose_prompt(task, steps, state), system=_COMPOSE_SYSTEM)
+        return (text or "").strip()
+
+    def stream_answer(self, task: str, state: ReactState, steps: list[ReactStep]):
+        """Stream the final answer token-by-token (for SSE)."""
+        yield from self.llm.stream(self._compose_prompt(task, steps, state), system=_COMPOSE_SYSTEM)
 
     def iter_run(
         self,
@@ -165,14 +196,14 @@ class ReactAgent:
                 yield steps[-1]
                 continue
 
-            if decision.final_answer is not None:
-                return ReactResult(
-                    answer=str(decision.final_answer), steps=steps, completed=True
-                )
-
             action_input = (
                 decision.action_input if isinstance(decision.action_input, dict) else {}
             )
+
+            # finish is a control action: stop gathering; the answer is composed
+            # separately (streamed token-by-token), not produced here.
+            if decision.action == "finish":
+                return ReactResult(answer="", steps=steps, completed=True)
 
             # ask_user is a control action, not a tool: pause and hand back the
             # question. The caller resumes by filling this step's observation
@@ -194,7 +225,8 @@ class ReactAgent:
 
             if decision.action is None:
                 steps.append(
-                    ReactStep(decision.thought, None, {}, "Error: provide 'action' or 'final_answer'.")
+                    ReactStep(decision.thought, None, {},
+                              "Error: provide an 'action' (a tool, 'finish', or 'ask_user').")
                 )
                 yield steps[-1]
                 continue

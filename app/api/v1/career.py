@@ -148,20 +148,6 @@ class ChatRequest(BaseModel):
     max_steps: int = Field(12, ge=1, le=20, description="Agent step budget")
 
 
-class ChatTurn(BaseModel):
-    role: str
-    content: str
-
-
-class ChatResponse(BaseModel):
-    status: str = "success"
-    session_id: str
-    reply: str
-    state: str  # "answered" | "awaiting_user" | "incomplete"
-    steps: list[dict] = Field(default_factory=list)
-    history: list[ChatTurn] = Field(default_factory=list)
-
-
 def _seed_state(request: "ChatRequest") -> ReactState:
     """Build a fresh session state from the request's inputs."""
     jd_inputs = [
@@ -200,74 +186,23 @@ def _apply_updates(state: ReactState, request: "ChatRequest") -> None:
         state.jd = state.match = None
 
 
-@router.post("/career/chat", response_model=ChatResponse)
-async def career_chat_endpoint(request: ChatRequest):
-    """Multi-turn conversational entry point.
-
-    Maintains a server-side session (parsed JD/resume/match + history). Slash
-    commands (``/match``, ``/report``, ``/prep``, ``/audit``, ``/compare``) run
-    the deterministic pipeline; free text drives the ReAct agent, which may pause
-    to ask the user a question (``state == "awaiting_user"``) and resume on the
-    next turn with the reply.
-    """
-    store = deps.get_session_store()
-    session = store.get(request.session_id)
-    if session is None:
-        session = store.create(_seed_state(request))
-    else:
-        _apply_updates(session.state, request)
-
-    message = request.message.strip()
-    session.history.append(ChatMessage(role="user", content=message))
-    # Recent turns (verbatim) + rolling summary of older ones, for the agent.
-    session.state.conversation = conversation_context(session) or None
-
-    steps: list[dict] = []
-    if session.awaiting_user:
-        # The message answers the agent's pending question: resume the run.
-        llm = deps.get_llm()
-        if not llm.is_configured():
-            raise HTTPException(status_code=503, detail="The agent requires a configured LLM.")
-        session.pending_steps[-1].observation = message
-        agent = build_default_agent(llm, max_steps=request.max_steps)
-        result = agent.run(session.pending_task, session.state, steps=session.pending_steps)
-        steps = steps_as_dicts(result.steps)
-        reply, status = _resolve(result, session)
-    elif is_slash(message):
-        reply = handle_slash(message, session.state)
-        status = "answered"
-    else:
-        llm = deps.get_llm()
-        if not llm.is_configured():
-            raise HTTPException(status_code=503, detail="The agent requires a configured LLM.")
-        agent = build_default_agent(llm, max_steps=request.max_steps)
-        result = agent.run(message, session.state)
-        steps = steps_as_dicts(result.steps)
-        reply, status = _resolve(result, session, task=message)
-
-    session.history.append(ChatMessage(role="assistant", content=reply))
-    fold_old_turns(session, deps.get_llm())  # condense anything beyond the recent window
-    return ChatResponse(
-        session_id=session.session_id,
-        reply=reply,
-        state=status,
-        steps=steps,
-        history=[ChatTurn(role=m.role, content=m.content) for m in session.history],
-    )
-
-
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 @router.post("/career/chat/stream")
 async def career_chat_stream_endpoint(request: ChatRequest):
-    """Streaming variant of ``/career/chat`` (Server-Sent Events).
+    """Multi-turn conversational entry point, streamed over Server-Sent Events.
 
-    Emits an ``event: step`` for each ReAct step as it completes (so the UI can
-    show the agent thinking live), then a final ``event: done`` carrying the
-    reply, state, session id, and full history. Slash commands emit only the
-    ``done`` event. Same session semantics as ``/career/chat``.
+    Maintains a server-side session (parsed JD/resume/match + rolling history).
+    Slash commands (``/match``, ``/report``, ``/prep``, ``/audit``, ``/compare``)
+    run the deterministic pipeline. Free text drives the ReAct agent, which may
+    pause to ask the user a question (``awaiting_user``) and resume next turn.
+
+    Event sequence: a ``step`` event per ReAct step (live reasoning), then the
+    final answer streamed token-by-token as ``token`` events, then a single
+    ``done`` event with the full reply, state, session id, and history. Slash
+    commands and ask_user pauses emit only ``done``.
     """
     store = deps.get_session_store()
     session = store.get(request.session_id)
@@ -285,9 +220,10 @@ async def career_chat_stream_endpoint(request: ChatRequest):
     llm = deps.get_llm()
     if is_agent and not llm.is_configured():
         raise HTTPException(status_code=503, detail="The agent requires a configured LLM.")
+    agent = build_default_agent(llm, max_steps=request.max_steps)
 
-    def _stream_agent(task, steps):
-        agent = build_default_agent(llm, max_steps=request.max_steps)
+    def run_steps(task, steps):
+        """Yield a `step` SSE per ReAct step; return the terminal ReactResult."""
         gen = agent.iter_run(task, session.state, steps)
         try:
             while True:
@@ -295,17 +231,7 @@ async def career_chat_stream_endpoint(request: ChatRequest):
         except StopIteration as stop:
             return stop.value
 
-    def events():
-        if session.awaiting_user:
-            session.pending_steps[-1].observation = message
-            result = yield from _stream_agent(session.pending_task, session.pending_steps)
-            reply, status = _resolve(result, session)
-        elif is_slash(message):
-            reply, status = handle_slash(message, session.state), "answered"
-        else:
-            result = yield from _stream_agent(message, None)
-            reply, status = _resolve(result, session, task=message)
-
+    def finish(reply, status):
         session.history.append(ChatMessage(role="assistant", content=reply))
         fold_old_turns(session, deps.get_llm())
         yield _sse("done", {
@@ -315,25 +241,40 @@ async def career_chat_stream_endpoint(request: ChatRequest):
             "history": [{"role": m.role, "content": m.content} for m in session.history],
         })
 
+    def events():
+        # Slash command: deterministic, no streaming of reasoning or tokens.
+        if not session.awaiting_user and is_slash(message):
+            session.clear_pending()
+            yield from finish(handle_slash(message, session.state), "answered")
+            return
+
+        if session.awaiting_user:
+            task = session.pending_task
+            session.pending_steps[-1].observation = message
+            result = yield from run_steps(task, session.pending_steps)
+        else:
+            task = message
+            result = yield from run_steps(task, None)
+
+        # Paused to ask the user: hand back the question, no answer composition.
+        if result.pending_question is not None:
+            session.pending_question = result.pending_question
+            session.pending_task = task
+            session.pending_steps = result.steps
+            yield from finish(result.pending_question, "awaiting_user")
+            return
+
+        # Compose the final answer, streamed token-by-token.
+        session.clear_pending()
+        parts: list[str] = []
+        for token in agent.stream_answer(task, session.state, result.steps):
+            parts.append(token)
+            yield _sse("token", {"text": token})
+        reply = "".join(parts).strip() or "(no answer produced)"
+        yield from finish(reply, "answered" if result.completed else "incomplete")
+
     return StreamingResponse(
         events(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-def _resolve(result, session, task: str | None = None) -> tuple[str, str]:
-    """Translate a ReactResult into (reply, status) and update session pending state."""
-    if result.pending_question is not None:
-        session.pending_question = result.pending_question
-        session.pending_task = task if task is not None else session.pending_task
-        session.pending_steps = result.steps
-        return result.pending_question, "awaiting_user"
-
-    session.clear_pending()
-    if result.completed:
-        return result.answer, "answered"
-    return (
-        result.answer or "I couldn't finish within the step budget — try rephrasing.",
-        "incomplete",
     )

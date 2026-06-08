@@ -8,11 +8,14 @@ from app.services.agent.schemas import ReactResult, ReactState, ReactTool
 
 
 class ScriptedLLM:
-    """Returns a fixed sequence of replies (last one repeats)."""
+    """Scripts the agent's decisions (ReAct-system prompts); every other call —
+    tool-internal extraction and the final-answer composition — returns a fixed
+    ``answer`` so it doesn't consume the decision script."""
 
-    def __init__(self, replies, configured=True):
+    def __init__(self, replies, configured=True, answer="FINAL ANSWER"):
         self.replies = list(replies)
         self.configured = configured
+        self.answer = answer
         self.calls = 0
         self.prompts = []
 
@@ -21,17 +24,25 @@ class ScriptedLLM:
 
     def complete(self, prompt, system=None, **kwargs):
         self.prompts.append(prompt)
-        reply = self.replies[min(self.calls, len(self.replies) - 1)]
-        self.calls += 1
-        return reply
+        if system and "ReAct agent" in system:
+            reply = self.replies[min(self.calls, len(self.replies) - 1)]
+            self.calls += 1
+            return reply
+        return self.answer  # compose / tool-internal
+
+    def stream(self, prompt, system=None, **kwargs):
+        self.prompts.append(prompt)
+        yield self.answer
 
 
 def _act(action, **args):
     return json.dumps({"thought": "go", "action": action, "action_input": args})
 
 
-def _final(answer):
-    return json.dumps({"thought": "done", "final_answer": answer})
+def _final(answer="done"):
+    # Finishing is a control action now; the answer is composed separately, so
+    # the argument is ignored (kept for call-site readability).
+    return json.dumps({"thought": "done", "action": "finish"})
 
 
 def _ask(question):
@@ -49,11 +60,11 @@ def _state():
 
 class TestReactLoop:
     def test_final_answer_immediately(self):
-        agent = ReactAgent(ScriptedLLM([_final("all done")]), [_echo_tool()])
+        agent = ReactAgent(ScriptedLLM([_final()], answer="all done"), [_echo_tool()])
         result = agent.run("task", _state())
         assert isinstance(result, ReactResult)
         assert result.completed is True
-        assert result.answer == "all done"
+        assert result.answer == "all done"  # composed after the finish action
         assert result.steps == []
 
     def test_tool_call_then_finish(self):
@@ -115,10 +126,10 @@ class TestReactLoop:
         result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
         assert "expected a JSON object" in result.steps[0].observation
 
-    def test_missing_action_and_final(self):
+    def test_missing_action(self):
         llm = ScriptedLLM([json.dumps({"thought": "hmm"}), _final("ok")])
         result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
-        assert "provide 'action' or 'final_answer'" in result.steps[0].observation
+        assert "provide an 'action'" in result.steps[0].observation
 
     def test_max_steps_exhausted(self):
         # Never finishes → loop hits the budget.
@@ -126,8 +137,9 @@ class TestReactLoop:
         agent = ReactAgent(llm, [_echo_tool()], max_steps=3)
         result = agent.run("task", _state())
         assert result.completed is False
-        assert result.answer == ""
         assert len(result.steps) == 3
+        # An incomplete run still composes a best-effort answer.
+        assert result.answer != ""
 
     def test_requires_configured_llm(self):
         agent = ReactAgent(ScriptedLLM([_final("x")], configured=False), [_echo_tool()])
@@ -151,7 +163,7 @@ class TestReactLoop:
 
     def test_ask_user_resume(self):
         # First run pauses on ask_user.
-        llm = ScriptedLLM([_ask("impact?"), _final("done with 40% speedup")])
+        llm = ScriptedLLM([_ask("impact?"), _final()], answer="done with 40% speedup")
         agent = ReactAgent(llm, [_echo_tool()])
         first = agent.run("task", _state())
         assert first.pending_question == "impact?"
@@ -159,8 +171,8 @@ class TestReactLoop:
         first.steps[-1].observation = "cut latency 40%"
         resumed = agent.run("task", _state(), steps=first.steps)
         assert resumed.completed is True
-        assert resumed.answer == "done with 40% speedup"
-        # The reply is visible in the scratchpad fed back to the model.
+        assert resumed.answer == "done with 40% speedup"  # composed answer
+        # The reply is visible in the scratchpad the answer is composed from.
         assert "cut latency 40%" in llm.prompts[-1]
 
     def test_ask_user_without_question_is_error(self):
@@ -181,7 +193,8 @@ class TestReactLoop:
             result = stop.value
         assert len(yielded) == 1
         assert yielded[0].action == "echo" and yielded[0].observation == "echoed hi"
-        assert result.completed is True and result.answer == "done"
+        # iter_run signals completion; the answer is composed by run()/the endpoint.
+        assert result.completed is True and result.answer == ""
 
     def test_iter_run_yields_pending_ask_user(self):
         gen = ReactAgent(ScriptedLLM([_ask("impact?")]), [_echo_tool()]).iter_run("t", _state())

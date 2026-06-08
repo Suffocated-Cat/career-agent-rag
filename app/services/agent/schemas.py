@@ -103,12 +103,11 @@ class ReactResult:
 class ReactDecision(BaseModel):
     """The validated shape of one LLM step.
 
-    A reply is either an action (``action`` + ``action_input``) or a
-    ``final_answer``. ``action_input`` is typed loosely so a malformed value
-    degrades to "no args" rather than failing validation.
+    A reply is an action (a tool name, or the control actions ``finish`` /
+    ``ask_user``) plus ``action_input``. ``action_input`` is typed loosely so a
+    malformed value degrades to "no args" rather than failing validation.
     """
 
     thought: str = ""
     action: str | None = None
     action_input: Any = Field(default_factory=dict)
-    final_answer: str | None = None

@@ -186,12 +186,15 @@
       $("send").disabled = true;
       setStatus("Working…");
 
-      // A live assistant bubble: shows steps as they stream, then the reply.
+      // A live assistant bubble: shows steps as they stream, then the reply
+      // typed out token-by-token.
       const live = appendMsg("assistant", "");
       const liveBody = live.querySelector(".body");
+      liveBody.innerHTML = '<span class="muted">…</span>';
       const liveTrace = document.createElement("div");
       live.appendChild(liveTrace);
       const steps = [];
+      let answer = "";
 
       try {
         const res = await fetch("/api/v1/career/chat/stream", {
@@ -206,8 +209,13 @@
         await readSSE(res, (event, data) => {
           if (event === "step") {
             steps.push(data);
-            liveBody.innerHTML = `<span class="muted">thinking… (${steps.length} step${steps.length > 1 ? "s" : ""})</span>`;
+            if (!answer) liveBody.innerHTML = `<span class="muted">thinking… (${steps.length} step${steps.length > 1 ? "s" : ""})</span>`;
             liveTrace.innerHTML = renderSteps(steps);
+            live.scrollIntoView({ behavior: "smooth", block: "end" });
+          } else if (event === "token") {
+            answer += data.text;
+            liveBody.className = "body";       // plain text while typing
+            liveBody.textContent = answer;
             live.scrollIntoView({ behavior: "smooth", block: "end" });
           } else if (event === "done") {
             done = data;

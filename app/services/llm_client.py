@@ -99,6 +99,52 @@ class LLMClient:
         self._record_usage(response)
         return response.choices[0].message.content
 
+    def stream(
+        self,
+        prompt: str,
+        system: str | None = None,
+        temperature: float = 0.0,
+        **kwargs: Any,
+    ):
+        """Stream a chat completion, yielding text deltas as they arrive.
+
+        Args:
+            prompt: The user message.
+            system: Optional system message.
+            temperature: Sampling temperature (default 0.0).
+            **kwargs: Extra parameters passed to the completion call.
+
+        Yields:
+            Content fragments (strings) in order; empty deltas are skipped.
+        """
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        if self._is_deepseek():
+            extra_body = dict(kwargs.pop("extra_body", {}) or {})
+            extra_body.setdefault("thinking", {"type": "disabled"})
+            kwargs["extra_body"] = extra_body
+
+        stream = self._get_client().chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            stream=True,
+            stream_options={"include_usage": True},
+            **kwargs,
+        )
+        for chunk in stream:
+            if getattr(chunk, "usage", None) is not None:
+                self._record_usage(chunk)
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            text = getattr(choices[0].delta, "content", None)
+            if text:
+                yield text
+
     def _is_deepseek(self) -> bool:
         """True when the configured endpoint/model is DeepSeek-compatible."""
         target = f"{self.base_url or ''} {self.model or ''}".lower()
