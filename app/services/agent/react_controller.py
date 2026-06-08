@@ -46,7 +46,9 @@ _SYSTEM = (
     "observation reports an error, reason about it and recover. The JD(s) and "
     "resume are already loaded in working memory — call the tools (which read it) "
     "to parse and analyze them; do NOT ask the user for inputs that are already "
-    "loaded. Output JSON only."
+    "loaded. Call only the tools needed for the specific question and finish as "
+    "soon as you can answer it — do not run every tool by default; a simple "
+    "question may need just one or two steps. Output JSON only."
 )
 
 _COMPOSE_SYSTEM = (
