@@ -170,6 +170,30 @@ class TestReactLoop:
         assert "ask_user requires" in result.steps[0].observation
         assert result.completed is True
 
+    def test_iter_run_yields_each_step(self):
+        llm = ScriptedLLM([_act("echo", x="hi"), _final("done")])
+        gen = ReactAgent(llm, [_echo_tool()]).iter_run("task", _state())
+        yielded, result = [], None
+        try:
+            while True:
+                yielded.append(next(gen))
+        except StopIteration as stop:
+            result = stop.value
+        assert len(yielded) == 1
+        assert yielded[0].action == "echo" and yielded[0].observation == "echoed hi"
+        assert result.completed is True and result.answer == "done"
+
+    def test_iter_run_yields_pending_ask_user(self):
+        gen = ReactAgent(ScriptedLLM([_ask("impact?")]), [_echo_tool()]).iter_run("t", _state())
+        yielded, result = [], None
+        try:
+            while True:
+                yielded.append(next(gen))
+        except StopIteration as stop:
+            result = stop.value
+        assert yielded[-1].action == "ask_user"
+        assert result.pending_question == "impact?"
+
     def test_conversation_injected_into_prompt(self):
         llm = ScriptedLLM([_final("x")])
         state = ReactState(conversation="User: hi\nAssistant: hello")

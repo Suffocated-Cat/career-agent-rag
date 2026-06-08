@@ -1,4 +1,9 @@
+import json
+
+from dataclasses import asdict
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
 from app.api import deps
@@ -248,6 +253,72 @@ async def career_chat_endpoint(request: ChatRequest):
         state=status,
         steps=steps,
         history=[ChatTurn(role=m.role, content=m.content) for m in session.history],
+    )
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@router.post("/career/chat/stream")
+async def career_chat_stream_endpoint(request: ChatRequest):
+    """Streaming variant of ``/career/chat`` (Server-Sent Events).
+
+    Emits an ``event: step`` for each ReAct step as it completes (so the UI can
+    show the agent thinking live), then a final ``event: done`` carrying the
+    reply, state, session id, and full history. Slash commands emit only the
+    ``done`` event. Same session semantics as ``/career/chat``.
+    """
+    store = deps.get_session_store()
+    session = store.get(request.session_id)
+    if session is None:
+        session = store.create(_seed_state(request))
+    else:
+        _apply_updates(session.state, request)
+
+    message = request.message.strip()
+    session.history.append(ChatMessage(role="user", content=message))
+    session.state.conversation = conversation_context(session) or None
+
+    # Decide the path up front so the LLM guard can fail cleanly before streaming.
+    is_agent = session.awaiting_user or not is_slash(message)
+    llm = deps.get_llm()
+    if is_agent and not llm.is_configured():
+        raise HTTPException(status_code=503, detail="The agent requires a configured LLM.")
+
+    def _stream_agent(task, steps):
+        agent = build_default_agent(llm, max_steps=request.max_steps)
+        gen = agent.iter_run(task, session.state, steps)
+        try:
+            while True:
+                yield _sse("step", asdict(next(gen)))
+        except StopIteration as stop:
+            return stop.value
+
+    def events():
+        if session.awaiting_user:
+            session.pending_steps[-1].observation = message
+            result = yield from _stream_agent(session.pending_task, session.pending_steps)
+            reply, status = _resolve(result, session)
+        elif is_slash(message):
+            reply, status = handle_slash(message, session.state), "answered"
+        else:
+            result = yield from _stream_agent(message, None)
+            reply, status = _resolve(result, session, task=message)
+
+        session.history.append(ChatMessage(role="assistant", content=reply))
+        fold_old_turns(session, deps.get_llm())
+        yield _sse("done", {
+            "session_id": session.session_id,
+            "reply": reply,
+            "state": status,
+            "history": [{"role": m.role, "content": m.content} for m in session.history],
+        })
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

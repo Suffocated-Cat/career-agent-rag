@@ -47,8 +47,16 @@
     .msg .role { font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.04em; }
     .msg .body { white-space:pre-wrap; }
     .msg.assistant .body { white-space:normal; }
+    .composer-wrap { position:relative; }
     .composer { display:flex; gap:10px; align-items:flex-end; }
     .composer textarea { min-height:52px; font:14px/1.5 system-ui, sans-serif; }
+    .slash-hint { position:absolute; bottom:100%; left:0; right:0; margin-bottom:8px; z-index:5;
+      background:var(--card); border:1px solid var(--line); border-radius:10px; padding:6px;
+      max-height:260px; overflow:auto; box-shadow:0 8px 24px rgba(0,0,0,.35); }
+    .slash-item { display:flex; gap:10px; align-items:baseline; padding:8px 10px; border-radius:8px; cursor:pointer; }
+    .slash-item:hover { background:#0b3a52; }
+    .slash-item code { color:var(--accent); font:13px ui-monospace, monospace; }
+    .slash-item .desc { color:var(--muted); font-size:12px; }
     .hint { color:var(--muted); font-size:12px; }
     .trace-toggle { cursor:pointer; color:var(--accent); font-size:12px; margin-top:8px; user-select:none; }
     .trace-step { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:8px 0 0; }
@@ -103,9 +111,12 @@
 
     <div id="chat" class="chat"></div>
 
-    <div class="composer">
-      <textarea id="msg" placeholder="Ask a question, or type a /command…"></textarea>
-      <button id="send">Send</button>
+    <div class="composer-wrap">
+      <div id="slash-hint" class="slash-hint hidden"></div>
+      <div class="composer">
+        <textarea id="msg" placeholder="Ask a question, or type a /command…"></textarea>
+        <button id="send">Send</button>
+      </div>
     </div>
     <div id="status" class="hint"></div>
   </main>
@@ -171,24 +182,72 @@
 
       appendMsg("user", message);
       $("msg").value = "";
+      hideSlashHint();
       $("send").disabled = true;
       setStatus("Working…");
+
+      // A live assistant bubble: shows steps as they stream, then the reply.
+      const live = appendMsg("assistant", "");
+      const liveBody = live.querySelector(".body");
+      const liveTrace = document.createElement("div");
+      live.appendChild(liveTrace);
+      const steps = [];
+
       try {
-        const res = await fetch("/api/v1/career/chat", {
+        const res = await fetch("/api/v1/career/chat/stream", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
         });
-        const body = await res.json();
-        if (!res.ok || body.status === "error") {
-          throw new Error(body.error ? body.error.message : "Request failed (" + res.status + ")");
+        if (!res.ok) {
+          let msg = "Request failed (" + res.status + ")";
+          try { const b = await res.json(); if (b.error) msg = b.error.message; } catch (_) {}
+          throw new Error(msg);
         }
-        sessionId = body.session_id;
-        appendAssistant(body);
-        setStatus(body.state === "awaiting_user" ? "The agent asked a question — reply below to continue." : "");
+        let done = null;
+        await readSSE(res, (event, data) => {
+          if (event === "step") {
+            steps.push(data);
+            liveBody.innerHTML = `<span class="muted">thinking… (${steps.length} step${steps.length > 1 ? "s" : ""})</span>`;
+            liveTrace.innerHTML = renderSteps(steps);
+            live.scrollIntoView({ behavior: "smooth", block: "end" });
+          } else if (event === "done") {
+            done = data;
+          }
+        });
+        if (!done) throw new Error("No response from the server.");
+        sessionId = done.session_id;
+        liveBody.className = "body md";
+        liveBody.innerHTML = renderMarkdown(done.reply);
+        liveTrace.remove();
+        if (steps.length) attachTrace(live, steps);
+        setStatus(done.state === "awaiting_user" ? "The agent asked a question — reply below to continue." : "");
         if ($("context").open) $("context").open = false; // tuck the context away once chatting
       } catch (e) {
+        live.remove();
         setStatus(e.message, true);
       } finally {
         $("send").disabled = false; $("msg").focus();
+      }
+    }
+
+    // Parse a Server-Sent Events stream, calling onEvent(event, dataObj) per message.
+    async function readSSE(res, onEvent) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+          let ev = "message", data = "";
+          for (const line of chunk.split("\n")) {
+            if (line.startsWith("event:")) ev = line.slice(6).trim();
+            else if (line.startsWith("data:")) data += line.slice(5).trim();
+          }
+          if (data) { try { onEvent(ev, JSON.parse(data)); } catch (_) {} }
+        }
       }
     }
 
@@ -203,24 +262,52 @@
       return el;
     }
 
-    function appendAssistant(body) {
-      const el = appendMsg("assistant", body.reply);
-      const steps = body.steps || [];
-      if (!steps.length) return;
+    function renderSteps(steps) {
+      return steps.map((s) => `
+        <div class="trace-step">
+          ${s.thought ? `<div class="th">${escapeHtml(s.thought)}</div>` : ""}
+          ${s.action ? `<div class="act">→ ${escapeHtml(s.action)} ${escapeHtml(JSON.stringify(s.action_input || {}))}</div>` : ""}
+          ${s.observation ? `<div class="obs">${escapeHtml(s.observation)}</div>` : ""}
+        </div>`).join("");
+    }
+
+    function attachTrace(msgEl, steps) {
       const toggle = document.createElement("div");
       toggle.className = "trace-toggle";
       const label = (open) => `${open ? "▾" : "▸"} reasoning (${steps.length} step${steps.length > 1 ? "s" : ""})`;
       toggle.textContent = label(false);
       const trace = document.createElement("div");
       trace.className = "hidden";
-      trace.innerHTML = steps.map((s) => `
-        <div class="trace-step">
-          ${s.thought ? `<div class="th">${escapeHtml(s.thought)}</div>` : ""}
-          ${s.action ? `<div class="act">→ ${escapeHtml(s.action)} ${escapeHtml(JSON.stringify(s.action_input || {}))}</div>` : ""}
-          ${s.observation ? `<div class="obs">${escapeHtml(s.observation)}</div>` : ""}
-        </div>`).join("");
+      trace.innerHTML = renderSteps(steps);
       toggle.addEventListener("click", () => { const hidden = trace.classList.toggle("hidden"); toggle.textContent = label(!hidden); });
-      el.appendChild(toggle); el.appendChild(trace);
+      msgEl.appendChild(toggle); msgEl.appendChild(trace);
+    }
+
+    // ── Slash-command hint ────────────────────────────────────────────
+    const SLASH = [
+      ["/match", "score the resume against the JD"],
+      ["/report", "full match report"],
+      ["/prep", "interview prep (optional: role, difficulty)"],
+      ["/audit", "flag unsupported / exaggerated claims"],
+      ["/compare", "rank multiple JDs"],
+      ["/help", "list commands"],
+    ];
+    function hideSlashHint() { $("slash-hint").classList.add("hidden"); }
+    function updateSlashHint() {
+      const v = $("msg").value;
+      const hint = $("slash-hint");
+      if (!v.startsWith("/") || /[\s\n]/.test(v)) { hideSlashHint(); return; }
+      const q = v.slice(1).toLowerCase();
+      const matches = SLASH.filter(([c]) => c.slice(1).startsWith(q));
+      if (!matches.length) { hideSlashHint(); return; }
+      hint.innerHTML = matches.map(([c, d]) =>
+        `<div class="slash-item" data-cmd="${c}"><code>${c}</code><span class="desc">${d}</span></div>`).join("");
+      hint.querySelectorAll(".slash-item").forEach((el) => el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        $("msg").value = el.dataset.cmd + " ";
+        hideSlashHint(); $("msg").focus();
+      }));
+      hint.classList.remove("hidden");
     }
 
     function resetChat() {
@@ -277,12 +364,19 @@
     }
 
     $("send").addEventListener("click", send);
-    $("reset").addEventListener("click", resetChat);
+    $("reset").addEventListener("click", () => { hideSlashHint(); resetChat(); });
     $("add-jd").addEventListener("click", addJdSlot);
-    // Enter sends; Shift+Enter inserts a newline.
+    // Enter sends; Shift+Enter inserts a newline. Ignore Enter while an IME is
+    // composing (e.g. selecting a Chinese candidate) — otherwise the send races
+    // the composition commit and the box looks like it didn't clear.
     $("msg").addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+        e.preventDefault(); send();
+      }
     });
+    $("msg").addEventListener("input", updateSlashHint);
+    // Hide the hint on blur, but after a click on an item can register.
+    $("msg").addEventListener("blur", () => setTimeout(hideSlashHint, 150));
     addJdSlot(); // seed the first JD slot
   </script>
 </body>

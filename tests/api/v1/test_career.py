@@ -239,3 +239,45 @@ def test_chat_agent_requires_llm(client, monkeypatch):
     })
     assert res.status_code == 503
     assert res.json()["status"] == "error"
+
+
+# ── /career/chat/stream (SSE) ──────────────────────────────────────────────
+
+def test_chat_stream_emits_steps_and_done(client, monkeypatch):
+    scripted = _ScriptedLLM([
+        json.dumps({"thought": "parse", "action": "parse_jd", "action_input": {}}),
+        json.dumps({"thought": "done", "final_answer": "Looks good."}),
+    ])
+    monkeypatch.setattr("app.api.deps.get_llm", lambda: scripted)
+    monkeypatch.setattr("app.api.deps.get_embedding_service", lambda: None)
+    monkeypatch.setattr("app.api.deps.get_kb_retriever", lambda: None)
+
+    res = client.post("/api/v1/career/chat/stream", json={
+        "message": "how do I look?", "jd_text": JD, "resume_text": RESUME,
+    })
+    assert res.status_code == 200
+    text = res.text
+    assert "event: step" in text   # at least one streamed step (parse_jd)
+    assert "event: done" in text
+    assert "Looks good." in text
+
+
+def test_chat_stream_slash_emits_only_done(client, monkeypatch):
+    monkeypatch.setattr("app.api.deps.get_llm", lambda: _UnconfiguredLLM())
+    monkeypatch.setattr("app.api.deps.get_embedding_service", lambda: None)
+
+    res = client.post("/api/v1/career/chat/stream", json={
+        "message": "/match", "jd_text": JD, "resume_text": RESUME,
+    })
+    assert res.status_code == 200
+    assert "event: step" not in res.text
+    assert "event: done" in res.text
+    assert "Match score" in res.text
+
+
+def test_chat_stream_requires_llm_for_agent(client, monkeypatch):
+    monkeypatch.setattr("app.api.deps.get_llm", lambda: _UnconfiguredLLM())
+    res = client.post("/api/v1/career/chat/stream", json={
+        "message": "free text question", "jd_text": JD, "resume_text": RESUME,
+    })
+    assert res.status_code == 503

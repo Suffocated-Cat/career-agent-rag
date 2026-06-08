@@ -107,7 +107,30 @@ class ReactAgent:
         state: ReactState,
         steps: list[ReactStep] | None = None,
     ) -> ReactResult:
-        """Run the ReAct loop until a final answer, an ask_user pause, or budget.
+        """Run the ReAct loop to completion, returning the final ReactResult.
+
+        A thin wrapper over :meth:`iter_run` that drains the per-step stream and
+        returns its result. See ``iter_run`` for the loop semantics.
+        """
+        gen = self.iter_run(task, state, steps)
+        try:
+            while True:
+                next(gen)
+        except StopIteration as stop:
+            return stop.value
+
+    def iter_run(
+        self,
+        task: str,
+        state: ReactState,
+        steps: list[ReactStep] | None = None,
+    ):
+        """Run the ReAct loop, yielding each ReactStep as it completes.
+
+        Yields steps one at a time (for streaming), and *returns* (via
+        StopIteration.value) the terminal ReactResult — completed (final
+        answer), paused (``pending_question`` set, after yielding the pending
+        ask_user step), or out of budget.
 
         Args:
             task: The natural-language task.
@@ -116,10 +139,6 @@ class ReactAgent:
             steps: Prior steps to resume from (for multi-turn). To resume after
                 an ask_user pause, set the last step's ``observation`` to the
                 user's reply, then pass the steps back here.
-
-        Returns:
-            A ReactResult that either completed (final answer), paused
-            (``pending_question`` set), or ran out of budget.
 
         Raises:
             RuntimeError: If the LLM is not configured.
@@ -135,6 +154,7 @@ class ReactAgent:
                 data = extract_json(raw)
             except Exception:
                 steps.append(ReactStep("", None, {}, "Error: reply was not valid JSON."))
+                yield steps[-1]
                 continue
             try:
                 decision = ReactDecision.model_validate(data)
@@ -142,6 +162,7 @@ class ReactAgent:
                 steps.append(
                     ReactStep("", None, {}, "Error: expected a JSON object with the required fields.")
                 )
+                yield steps[-1]
                 continue
 
             if decision.final_answer is not None:
@@ -163,8 +184,10 @@ class ReactAgent:
                         ReactStep(decision.thought, "ask_user", action_input,
                                   "Error: ask_user requires action_input.question.")
                     )
+                    yield steps[-1]
                     continue
                 steps.append(ReactStep(decision.thought, "ask_user", action_input, ""))
+                yield steps[-1]
                 return ReactResult(
                     answer="", steps=steps, completed=False, pending_question=question
                 )
@@ -173,6 +196,7 @@ class ReactAgent:
                 steps.append(
                     ReactStep(decision.thought, None, {}, "Error: provide 'action' or 'final_answer'.")
                 )
+                yield steps[-1]
                 continue
 
             tool = self.tools.get(decision.action)
@@ -190,5 +214,6 @@ class ReactAgent:
             steps.append(
                 ReactStep(decision.thought, decision.action, action_input, observation)
             )
+            yield steps[-1]
 
         return ReactResult(answer="", steps=steps, completed=False)
