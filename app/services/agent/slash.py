@@ -18,8 +18,6 @@ from app.services.project_auditor import audit_resume
 from app.services.report_generator import generate_report
 from app.services.resume_parser import parse_resume
 
-COMMANDS = ("help", "match", "report", "prep", "audit", "compare")
-
 _HELP = (
     "**Commands** (free text goes to the agent):\n"
     "- `/match` — score the resume against the JD\n"
