@@ -344,8 +344,8 @@ It decodes JSON tool output to dicts/lists and raises `MCPToolError` when the se
 
 This is where retrieval-augmented *generation* actually happens. The other retrieval in the project ranks the resume's own items; here the LLM's output is **grounded on documents retrieved from an external knowledge base**.
 
-- **Store:** a curated interview-question / skill-note KB (`data/knowledge/`, ~145 docs across ~30 topics) lives in **PostgreSQL + pgvector**. Every entry carries `skill` / `type` plus `role` / `difficulty` / `tags` / `answer_outline`, which the loader puts into the `metadata` (`jsonb`) column (the loader treats these as optional, so bare entries still load). `scripts/ingest_kb.py` embeds each document and upserts it into `knowledge_doc` (`vector(384)`, GIN index on `metadata`).
-- **Retriever:** `PgVectorRetriever.search(query, k, filters=...)` implements the same `Retriever` interface but ranks DB-side with pgvector's cosine operator (`<=>`), and supports **metadata-filtered vector search** — scalar equality (`{"difficulty": "mid"}`) and jsonb array overlap (`{"role": ["backend"]}`) applied before ranking. That filtering + persistence is the concrete reason to use pgvector over an in-memory index. Because it's behind the `Retriever` protocol, the in-memory BM25/vector retriever is used for the offline test suite while pgvector backs production — a single integration test exercises the real DB (including a metadata filter) and self-skips when Postgres isn't available.
+- **Store:** a curated interview-question / skill-note KB (`data/knowledge/`, ~145 docs across ~30 topics) lives in **PostgreSQL + pgvector**. Every entry carries `skill` / `type` plus `role` / `difficulty` / `tags` / `answer_outline`, which the loader puts into the `metadata` (`jsonb`) column (the loader treats these as optional, so bare entries still load). `scripts/ingest_kb.py` embeds each document and upserts it into `knowledge_doc` (`vector(384)`, GIN index on `metadata`, HNSW index on `embedding` for cosine ANN search).
+- **Retriever:** `PgVectorRetriever.search(query, k, filters=...)` implements the same `Retriever` interface but ranks DB-side with pgvector's cosine operator (`<=>`), and supports **metadata-filtered vector search** — scalar equality (`{"difficulty": "mid"}`) and jsonb array overlap (`{"role": ["backend"]}`) applied before ranking. That filtering + persistence is the concrete reason to use pgvector over an in-memory index. Because it's behind the `Retriever` protocol, the in-memory BM25/vector retriever is used for the offline test suite while pgvector backs production — wrapped in a `RerankingRetriever` so the pgvector candidate pool is re-scored by the cross-encoder before grounding (filters and candidate metadata are forwarded through the rerank stage). A single integration test exercises the real DB (including a metadata filter) and self-skips when Postgres isn't available.
 - **Generation:** `interview_prep.generate_interview_prep(jd, resume, kb_retriever, llm, role=, difficulty=)` retrieves **per JD skill** (each skill contributes its top results, deduped, so common skills don't crowd out the rest) — **optionally metadata-filtered by `role` / `difficulty`** — then asks the LLM to write a prep guide **grounded strictly on the retrieved questions and their `answer_outline`s**, highlighting the candidate's skill gaps. With no LLM it falls back to listing the retrieved questions (with outlines) + gaps. Exposed at `POST /api/v1/interview-prep` (which accepts optional `role` / `difficulty`).
 
 This keeps the architecture's invariant: retrieval and the structured match stay deterministic; the LLM only synthesizes over retrieved context, with a fallback.
@@ -458,8 +458,9 @@ priority order with the reasoning and expected effect.
 
 ### DB-side hybrid retrieval (BM25 + vector)
 
-**Now:** the pgvector path is semantic-only; the BM25 arm and RRF fusion run
-only over the in-memory resume corpus.
+**Now:** the pgvector path recalls semantically (then reranks) but has no
+lexical arm; the BM25 arm and RRF fusion run only over the in-memory resume
+corpus.
 **Change:** add a `tsvector` full-text column (+ GIN index) to `knowledge_doc`
 and fuse lexical and vector rankings DB-side (e.g. RRF).
 **Why:** pure vector search drifts on exact technical tokens (`gRPC`, `k8s`,
