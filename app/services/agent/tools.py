@@ -8,7 +8,7 @@ which is the point of the ReAct loop.
 """
 
 from app.services.agent.react_controller import ReactAgent
-from app.services.agent.schemas import ReactState, ReactTool
+from app.services.agent.schemas import JdComparison, ReactState, ReactTool
 from app.services.interview_prep import generate_interview_prep
 from app.services.jd_parser import parse_jd
 from app.services.llm_support import generate_text
@@ -215,6 +215,58 @@ def _rewrite_bullet(state: ReactState, args: dict) -> str:
     )
 
 
+def _compare_jds(state: ReactState, args: dict) -> str:
+    if state.resume is None:
+        return "Error: parse the resume first (parse_resume)."
+    if len(state.jd_inputs) < 2:
+        return "Error: need at least two JDs to compare (seed jd_inputs)."
+
+    state.comparison = []
+    for item in state.jd_inputs:
+        jd = parse_jd(item.text, embedding_service=state.embedding_service, llm=state.llm)
+        m = match_jd_resume(jd, state.resume, embedding_service=state.embedding_service)
+        state.comparison.append(JdComparison(label=item.label, jd=jd, match=m))
+    state.comparison.sort(key=lambda c: c.match.overall_score, reverse=True)
+
+    lines = []
+    for c in state.comparison:
+        miss = ", ".join(c.match.missing_skills[:3])
+        lines.append(
+            f"{c.label}: score {c.match.overall_score:.2f}"
+            + (f", missing {miss}" if miss else "")
+        )
+    return f"Best fit: {state.comparison[0].label}.\n" + "\n".join(lines)
+
+
+def _select_jd(state: ReactState, args: dict) -> str:
+    if not state.comparison:
+        return "Error: run compare_jds first."
+    key = args.get("label", args.get("index"))
+    if key is None:
+        return "Error: provide action_input.label or action_input.index."
+
+    chosen = None
+    if isinstance(key, int) or (isinstance(key, str) and key.isdigit()):
+        idx = int(key)
+        if 0 <= idx < len(state.comparison):
+            chosen = state.comparison[idx]
+    else:
+        for c in state.comparison:
+            if c.label.lower() == str(key).lower():
+                chosen = c
+                break
+    if chosen is None:
+        labels = ", ".join(c.label for c in state.comparison)
+        return f"Error: no JD matching {key!r}. Available: {labels}."
+
+    state.jd = chosen.jd
+    state.match = chosen.match
+    return (
+        f"Active JD set to {chosen.label} (score {chosen.match.overall_score:.2f}). "
+        "Now use rank_projects / advise / rewrite_bullet / interview_prep on it."
+    )
+
+
 def default_tools() -> list[ReactTool]:
     """Build the standard CareerAgent ReAct tool set."""
     return [
@@ -281,6 +333,20 @@ def default_tools() -> list[ReactTool]:
             "Rewrite a resume line to better target the JD without inventing "
             'facts. action_input: {"text": "<bullet>", "focus": "<optional>"}.',
             _rewrite_bullet,
+        ),
+        ReactTool(
+            "compare_jds",
+            "Parse and match every candidate JD (seeded in jd_inputs) against "
+            "the resume and rank them best-first. Requires a parsed resume and "
+            "at least two JDs. No action_input.",
+            _compare_jds,
+        ),
+        ReactTool(
+            "select_jd",
+            "After compare_jds, promote one JD to the active role so the other "
+            "tools operate on it. "
+            'action_input: {"label": "Job A"} or {"index": 0}.',
+            _select_jd,
         ),
     ]
 

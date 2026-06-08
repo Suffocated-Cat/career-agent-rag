@@ -1,8 +1,8 @@
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.api import deps
-from app.services.agent.schemas import ReactState
+from app.services.agent.schemas import JdInput, ReactState
 from app.services.agent.tools import build_default_agent
 from app.services.agent.trace import steps_as_dicts
 from app.skills.career_match import CareerMatchResult, run_career_match
@@ -40,13 +40,30 @@ async def career_match_endpoint(request: CareerMatchRequest):
     return CareerMatchResponse(data=result)
 
 
+class JdInputModel(BaseModel):
+    """One candidate JD for multi-JD comparison."""
+
+    text: str = Field(..., min_length=1, description="Raw job description text")
+    label: str | None = Field(None, description="Display label, e.g. 'Job A'")
+
+
 class CareerAskRequest(BaseModel):
-    """An open-ended question over a JD + resume, answered by the ReAct agent."""
+    """An open-ended question over a resume + one or more JDs, answered by the
+    ReAct agent. Provide a single ``jd_text`` or a list of ``jds`` to compare."""
 
     question: str = Field(..., min_length=1, description="The user's question")
-    jd_text: str = Field(..., min_length=1, description="Raw job description text")
     resume_text: str = Field(..., min_length=1, description="Raw resume text")
+    jd_text: str | None = Field(None, description="Raw JD text (single-JD path)")
+    jds: list[JdInputModel] = Field(
+        default_factory=list, description="Multiple JDs to compare"
+    )
     max_steps: int = Field(8, ge=1, le=16, description="Agent step budget")
+
+    @model_validator(mode="after")
+    def _require_a_jd(self) -> "CareerAskRequest":
+        if not self.jd_text and not self.jds:
+            raise ValueError("provide jd_text or a non-empty jds list")
+        return self
 
 
 class CareerAskResponse(BaseModel):
@@ -71,13 +88,22 @@ async def career_ask_endpoint(request: CareerAskRequest):
     """Answer an open-ended career question by driving the ReAct agent.
 
     Unlike ``/career-match`` (a fixed pipeline), the agent decides which tools to
-    call — diagnosing, retrieving from the KB, advising, or rewriting — based on
-    the question and intermediate results. Returns the answer and the full
-    Thought/Action/Observation trace for transparency.
+    call — diagnosing, retrieving from the KB, advising, rewriting, or comparing
+    multiple JDs — based on the question and intermediate results. Returns the
+    answer and the full Thought/Action/Observation trace for transparency.
     """
+    if request.jds:
+        jd_inputs = [
+            JdInput(label=j.label or f"Job {chr(65 + i)}", text=j.text)
+            for i, j in enumerate(request.jds)
+        ]
+    else:
+        jd_inputs = [JdInput(label="Job A", text=request.jd_text)]
+
     state = ReactState(
-        jd_text=request.jd_text,
+        jd_text=request.jd_text or jd_inputs[0].text,
         resume_text=request.resume_text,
+        jd_inputs=jd_inputs,
         embedding_service=deps.get_embedding_service(),
         kb_retriever=_kb_retriever_or_none(),
         llm=deps.get_llm(),

@@ -2,7 +2,7 @@
 from app.models.jd import JobDescription
 from app.models.match import MatchReport
 from app.services.agent.react_controller import ReactAgent
-from app.services.agent.schemas import ReactState
+from app.services.agent.schemas import JdInput, ReactState
 from app.services.agent.tools import build_default_agent, default_tools
 
 
@@ -59,6 +59,7 @@ class TestToolSet:
             "parse_jd", "parse_resume", "match", "rank_projects",
             "audit", "generate_report",
             "kb_search", "interview_prep", "advise", "rewrite_bullet",
+            "compare_jds", "select_jd",
         }
 
     def test_build_default_agent(self):
@@ -228,3 +229,76 @@ class TestRewriteBullet:
     def test_fallback_returns_original(self):
         obs = _tools()["rewrite_bullet"].handler(ReactState(), {"text": "did stuff"})
         assert obs == "did stuff"
+
+
+# A second JD that overlaps the resume's skills less than the first.
+JD_TEXT_B = "Frontend Engineer at Gamma\n\nRequirements:\n- React\n- TypeScript"
+
+
+def _multi_state():
+    """State with a parsed resume and two candidate JDs seeded."""
+    state = ReactState(
+        resume_text=RESUME_TEXT,
+        jd_inputs=[
+            JdInput(label="Job A", text=JD_TEXT),
+            JdInput(label="Job B", text=JD_TEXT_B),
+        ],
+    )
+    _tools()["parse_resume"].handler(state, {})
+    return state
+
+
+class TestCompareJds:
+    def test_requires_resume(self):
+        state = ReactState(jd_inputs=[JdInput("A", JD_TEXT), JdInput("B", JD_TEXT_B)])
+        assert "parse the resume first" in _tools()["compare_jds"].handler(state, {})
+
+    def test_requires_two_jds(self):
+        state = ReactState(resume_text=RESUME_TEXT, jd_inputs=[JdInput("A", JD_TEXT)])
+        _tools()["parse_resume"].handler(state, {})
+        assert "at least two JDs" in _tools()["compare_jds"].handler(state, {})
+
+    def test_ranks_best_first(self):
+        state = _multi_state()
+        obs = _tools()["compare_jds"].handler(state, {})
+        assert "Best fit:" in obs
+        assert len(state.comparison) == 2
+        # Sorted by score, descending.
+        scores = [c.match.overall_score for c in state.comparison]
+        assert scores == sorted(scores, reverse=True)
+        # The Python-overlapping JD A should beat the React/TS JD B.
+        assert state.comparison[0].label == "Job A"
+
+
+class TestSelectJd:
+    def test_requires_comparison(self):
+        assert "run compare_jds first" in _tools()["select_jd"].handler(ReactState(), {})
+
+    def test_requires_key(self):
+        state = _multi_state()
+        _tools()["compare_jds"].handler(state, {})
+        assert "provide action_input" in _tools()["select_jd"].handler(state, {})
+
+    def test_select_by_label_sets_active_jd(self):
+        state = _multi_state()
+        tools = _tools()
+        tools["compare_jds"].handler(state, {})
+        obs = tools["select_jd"].handler(state, {"label": "Job B"})
+        assert "Active JD set to Job B" in obs
+        assert state.jd is not None and state.match is not None
+        assert "react" in state.jd.skills
+
+    def test_select_by_index(self):
+        state = _multi_state()
+        tools = _tools()
+        tools["compare_jds"].handler(state, {})
+        obs = tools["select_jd"].handler(state, {"index": 0})
+        assert "Active JD set to" in obs
+        assert state.jd is state.comparison[0].jd
+
+    def test_unknown_label(self):
+        state = _multi_state()
+        tools = _tools()
+        tools["compare_jds"].handler(state, {})
+        obs = tools["select_jd"].handler(state, {"label": "Nope"})
+        assert "no JD matching" in obs

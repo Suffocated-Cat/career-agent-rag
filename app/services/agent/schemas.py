@@ -18,8 +18,31 @@ from app.models.resume import Resume
 
 
 @dataclass
+class JdInput:
+    """A raw JD to consider, with a human-readable label (e.g. "Job A")."""
+
+    label: str
+    text: str
+
+
+@dataclass
+class JdComparison:
+    """One JD's parsed form and its match against the resume, for comparison."""
+
+    label: str
+    jd: JobDescription
+    match: MatchResult
+
+
+@dataclass
 class ReactState:
-    """Working memory shared across tool calls within one run."""
+    """Working memory shared across tool calls within one run.
+
+    Single-JD flows use ``jd`` / ``match`` (the "active" JD). Multi-JD
+    comparison seeds ``jd_inputs`` and populates ``comparison``; ``select_jd``
+    then promotes one comparison entry into the active ``jd`` / ``match`` so the
+    single-JD tools (rank_projects, advise, …) operate on the chosen role.
+    """
 
     jd_text: str | None = None
     resume_text: str | None = None
@@ -28,6 +51,8 @@ class ReactState:
     match: MatchResult | None = None
     report: MatchReport | None = None
     interview: Any | None = None  # InterviewPrep, kept loose to avoid a service import
+    jd_inputs: list[JdInput] = field(default_factory=list)  # candidate JDs to compare
+    comparison: list[JdComparison] = field(default_factory=list)  # ranked, best first
     embedding_service: Any | None = None
     kb_retriever: Any | None = None  # knowledge-base retriever for RAG tools
     llm: Any | None = None
