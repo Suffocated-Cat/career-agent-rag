@@ -123,6 +123,32 @@ class TestHappyPath:
         assert "Parsed JD" in obs
         assert "python" in state.jd.skills
 
+    def test_parse_jd_skips_when_already_parsed(self):
+        state = _state()
+        tools = _tools()
+        tools["parse_jd"].handler(state, {})
+        first = state.jd
+        obs = tools["parse_jd"].handler(state, {})
+        assert "already parsed" in obs
+        assert state.jd is first  # not re-parsed
+
+    def test_parse_jd_explicit_text_forces_reparse(self):
+        state = _state()
+        tools = _tools()
+        tools["parse_jd"].handler(state, {})
+        obs = tools["parse_jd"].handler(state, {"text": "New Role\n\nRequirements:\n- Go"})
+        assert "Parsed JD" in obs
+        assert "go" in state.jd.skills
+
+    def test_parse_resume_skips_when_already_parsed(self):
+        state = _state()
+        tools = _tools()
+        tools["parse_resume"].handler(state, {})
+        first = state.resume
+        obs = tools["parse_resume"].handler(state, {})
+        assert "already parsed" in obs
+        assert state.resume is first
+
     def test_rank_requires_both(self):
         assert "parse the JD and resume first" in _tools()["rank_projects"].handler(
             ReactState(), {}

@@ -19,29 +19,44 @@ from app.services.project_auditor import audit_resume
 from app.services.report_generator import generate_report
 
 
-def _parse_jd(state: ReactState, args: dict) -> str:
-    text = args.get("text") or state.jd_text
-    if not text:
-        return "Error: no JD text provided (pass action_input.text or seed jd_text)."
-    state.jd = parse_jd(text, embedding_service=state.embedding_service, llm=state.llm)
+def _jd_summary(jd) -> str:
     return (
-        f"Parsed JD: title={state.jd.title!r}, {len(state.jd.skills)} skills, "
-        f"{len(state.jd.responsibilities)} responsibilities."
+        f"title={jd.title!r}, {len(jd.skills)} skills, "
+        f"{len(jd.responsibilities)} responsibilities"
     )
 
 
+def _resume_summary(resume) -> str:
+    return (
+        f"{len(resume.skills)} skills, {len(resume.experience)} experiences, "
+        f"{len(resume.projects)} projects"
+    )
+
+
+def _parse_jd(state: ReactState, args: dict) -> str:
+    explicit = args.get("text")
+    # Idempotent: skip re-parsing when already parsed and no new text is given.
+    if state.jd is not None and not explicit:
+        return f"JD already parsed ({_jd_summary(state.jd)}); skipped re-parsing."
+    text = explicit or state.jd_text
+    if not text:
+        return "Error: no JD text provided (pass action_input.text or seed jd_text)."
+    state.jd = parse_jd(text, embedding_service=state.embedding_service, llm=state.llm)
+    return f"Parsed JD: {_jd_summary(state.jd)}."
+
+
 def _parse_resume(state: ReactState, args: dict) -> str:
-    text = args.get("text") or state.resume_text
+    explicit = args.get("text")
+    # Idempotent: skip re-parsing when already parsed and no new text is given.
+    if state.resume is not None and not explicit:
+        return f"Resume already parsed ({_resume_summary(state.resume)}); skipped re-parsing."
+    text = explicit or state.resume_text
     if not text:
         return "Error: no resume text provided (pass action_input.text or seed resume_text)."
     state.resume = parse_resume(
         text, embedding_service=state.embedding_service, llm=state.llm
     )
-    return (
-        f"Parsed resume: {len(state.resume.skills)} skills, "
-        f"{len(state.resume.experience)} experiences, "
-        f"{len(state.resume.projects)} projects."
-    )
+    return f"Parsed resume: {_resume_summary(state.resume)}."
 
 
 def _match(state: ReactState, args: dict) -> str:
