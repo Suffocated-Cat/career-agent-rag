@@ -1,9 +1,9 @@
 """
 ProjectAuditor — rule-based authenticity / quality checks on a resume.
 
-Retrieval (Week 2) answers "which experience is most relevant"; auditing asks
-"is the claim trustworthy". These are deliberately transparent rules, not an
-LLM, so every finding is explainable and reproducible:
+Retrieval answers "which experience is most relevant"; auditing asks "is the
+claim trustworthy". These are deliberately transparent rules, not an LLM, so
+every finding is explainable and reproducible:
 
   - unsupported_skill        — a skill is listed but never appears in any
                                experience or project (claimed without evidence).
@@ -14,7 +14,7 @@ LLM, so every finding is explainable and reproducible:
                                description does not substantiate.
 
 The output feeds the project-risk section of the match report and gives the
-LLM (Week 3) a structured starting point instead of auditing from scratch.
+LLM layer a structured starting point instead of auditing from scratch.
 """
 
 import json

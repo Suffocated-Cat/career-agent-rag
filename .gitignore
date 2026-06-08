@@ -1,6 +1,9 @@
 # Schedule (personal plan, not part of the project)
 new_schedule.md
 
+# Experiments (personal scratch, not part of the project)
+experiments/
+
 # Python
 __pycache__/
 *.py[cod]

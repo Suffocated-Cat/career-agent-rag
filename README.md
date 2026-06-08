@@ -216,13 +216,6 @@ career-agent-rag/
 ├── data/knowledge/          # Curated KB (interview_questions.json)
 ├── scripts/                 # ingest_kb.py (embed + upsert KB into pgvector)
 ├── frontend/                # Minimal static UI (index.html)
-├── experiments/             # Standalone experiment scripts
-│   ├── day1_embedding_demo.py
-│   ├── day2_tokenizer_demo.py
-│   ├── day3_embedding_demo.py
-│   ├── day4_position_encoding_demo.py
-│   ├── day5_self_attention_demo.py
-│   └── day6_multi_head_attention_demo.py
 ├── docker-compose.yml       # Multi-service orchestration
 └── requirements.txt
 ```
@@ -291,7 +284,7 @@ The `app/services/retrieval/` package treats the resume (its experiences and pro
 - **vague_experience** — a highlight claims impact or effort without quantification (no numbers/percentages).
 - **unsupported_project_claim** — a project lists advanced technologies its description does not substantiate (too thin, or never mentions them).
 
-This gives the Week-3 LLM a structured starting point for risk analysis instead of auditing from scratch. The audit is exposed standalone at `POST /api/v1/audit`, attached to every `/match` result as `project_audit`, and rendered as a "Project Risk Audit" section in the generated report.
+This gives the LLM layer a structured starting point for risk analysis instead of auditing from scratch. The audit is exposed standalone at `POST /api/v1/audit`, attached to every `/match` result as `project_audit`, and rendered as a "Project Risk Audit" section in the generated report.
 
 ## Agent
 
@@ -445,36 +438,6 @@ The development server uses `uvicorn --reload` with volume-mounted code. Edit an
 docker compose exec backend pytest -q
 docker compose exec backend pytest --cov=app --cov-report=term-missing -q
 ```
-
-### Running Experiments
-
-```bash
-# Day 1: Embedding similarity demo
-docker compose exec backend python experiments/day1_embedding_demo.py
-
-# Day 2: Tokenizer & JD Parser demo
-docker compose exec backend python experiments/day2_tokenizer_demo.py
-
-# Day 3: Embedding semantic matching demo
-docker compose exec backend python experiments/day3_embedding_demo.py
-
-# Day 4: Position encoding demo
-docker compose exec backend python experiments/day4_position_encoding_demo.py
-
-# Day 5: Self-attention mechanism demo
-docker compose exec backend python experiments/day5_self_attention_demo.py
-
-# Day 6: Multi-head attention demo
-docker compose exec backend python experiments/day6_multi_head_attention_demo.py
-```
-
-## Development Plan
-
-See the 4-week development schedule for the full roadmap covering:
-- Week 1: Project setup + ML/DL basics + Transformer intro
-- Week 2: RAG + retrieval + reranking + BERT/GPT
-- Week 3: Agent + MCP + fine-tuning
-- Week 4: Evaluation + deployment + optimization
 
 ## Retrieval Roadmap
 
