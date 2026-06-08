@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS knowledge_doc (
     embedding vector({EMBED_DIM})
 );
 CREATE INDEX IF NOT EXISTS knowledge_doc_metadata_gin ON knowledge_doc USING gin (metadata);
+CREATE INDEX IF NOT EXISTS knowledge_doc_embedding_hnsw ON knowledge_doc USING hnsw (embedding vector_cosine_ops);
 """
 
 

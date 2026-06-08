@@ -77,7 +77,7 @@ class Reranker:
 
         The returned results carry the cross-encoder relevance score (which
         is on a different scale than the upstream retriever's score), with
-        ``doc_id`` and ``text`` preserved from the candidates.
+        ``doc_id``, ``text`` and ``metadata`` preserved from the candidates.
 
         Args:
             query: The search query text.
@@ -100,6 +100,7 @@ class Reranker:
                 doc_id=c.doc_id,
                 text=c.text,
                 score=float(score),
+                metadata=c.metadata,
             )
             for c, score in zip(candidates, scores)
         ]
@@ -138,7 +139,17 @@ class RerankingRetriever:
         self.reranker = reranker
         self.candidate_pool = candidate_pool
 
-    def search(self, query: str, k: int = 10) -> list[RetrievalResult]:
-        """Recall a candidate pool, rerank it, and return the top-k."""
-        candidates = self.base.search(query, k=self.candidate_pool)
+    def search(
+        self, query: str, k: int = 10, filters: dict | None = None
+    ) -> list[RetrievalResult]:
+        """Recall a candidate pool, rerank it, and return the top-k.
+
+        *filters* are forwarded to the base retriever when given, so a
+        metadata-filtering backend (e.g. pgvector) keeps its filtering
+        behaviour behind the reranking stage.
+        """
+        if filters is None:
+            candidates = self.base.search(query, k=self.candidate_pool)
+        else:
+            candidates = self.base.search(query, k=self.candidate_pool, filters=filters)
         return self.reranker.rerank(query, candidates, k=k)

@@ -29,7 +29,15 @@ def get_llm() -> LLMClient:
 
 @lru_cache(maxsize=1)
 def get_kb_retriever():
-    """Knowledge-base retriever (pgvector), sharing the embedding service."""
-    from app.services.retrieval.pgvector_retriever import PgVectorRetriever
+    """Knowledge-base retriever (pgvector) behind a cross-encoder reranker.
 
-    return PgVectorRetriever(get_embedding_service())
+    pgvector recalls a candidate pool by cosine similarity; the cross-encoder
+    then re-scores it for precision. The reranker forwards metadata filters
+    (role/difficulty) and preserves each candidate's metadata, so downstream
+    grounding on ``answer_outline`` still works.
+    """
+    from app.services.retrieval.pgvector_retriever import PgVectorRetriever
+    from app.services.retrieval.reranker import Reranker, RerankingRetriever
+
+    base = PgVectorRetriever(get_embedding_service())
+    return RerankingRetriever(base, Reranker(), candidate_pool=30)

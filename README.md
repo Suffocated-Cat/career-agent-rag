@@ -451,6 +451,34 @@ See the 4-week development schedule for the full roadmap covering:
 - Week 3: Agent + MCP + fine-tuning
 - Week 4: Evaluation + deployment + optimization
 
+## Retrieval Roadmap
+
+Further improvements to the RAG retrieval stack, not yet implemented. Listed in
+priority order with the reasoning and expected effect.
+
+### DB-side hybrid retrieval (BM25 + vector)
+
+**Now:** the pgvector path is semantic-only; the BM25 arm and RRF fusion run
+only over the in-memory resume corpus.
+**Change:** add a `tsvector` full-text column (+ GIN index) to `knowledge_doc`
+and fuse lexical and vector rankings DB-side (e.g. RRF).
+**Why:** pure vector search drifts on exact technical tokens (`gRPC`, `k8s`,
+version strings); BM25 nails them.
+**Effect:** higher recall on rare/exact terms, especially for short keyword
+queries — complementing the cross-encoder reranker, which only re-orders what
+was already recalled.
+
+### Query rewriting / expansion (HyDE, multi-query)
+
+**Now:** the KB query is just the JD's skill terms joined together; per-skill
+retrieval already spreads coverage across skills.
+**Change:** before retrieval, expand the query — HyDE (generate a hypothetical
+answer, embed that) or multi-query (LLM rewrites into several phrasings, union
+the results).
+**Why:** short keyword queries embed poorly and miss paraphrased passages.
+**Effect:** better recall on under-specified or jargon-light queries, at the
+cost of one extra LLM call per query.
+
 ## License
 
 MIT

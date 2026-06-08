@@ -11,12 +11,15 @@ def test_get_llm_builds_client():
 
 
 def test_get_kb_retriever_builds(monkeypatch):
-    """get_kb_retriever builds a PgVectorRetriever (no DB at construction)."""
+    """get_kb_retriever builds a reranker over pgvector (no DB at construction)."""
     from app.services.retrieval.pgvector_retriever import PgVectorRetriever
+    from app.services.retrieval.reranker import RerankingRetriever
 
     monkeypatch.setattr(deps, "get_embedding_service", lambda: None)
     deps.get_kb_retriever.cache_clear()
-    assert isinstance(deps.get_kb_retriever(), PgVectorRetriever)
+    retriever = deps.get_kb_retriever()
+    assert isinstance(retriever, RerankingRetriever)
+    assert isinstance(retriever.base, PgVectorRetriever)
     deps.get_kb_retriever.cache_clear()
 
 
