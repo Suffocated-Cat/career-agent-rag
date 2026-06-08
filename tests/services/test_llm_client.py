@@ -144,3 +144,39 @@ class TestLazyClient:
         assert c1 is c2  # cached
         assert len(built) == 1
         assert built[0] == {"api_key": "key123", "base_url": "http://x/v1"}
+
+
+class _Chunk:
+    """A streaming chunk: a content delta, or a usage-only final chunk."""
+
+    def __init__(self, content=None, usage=None):
+        self.choices = (
+            [type("C", (), {"delta": type("D", (), {"content": content})()})()]
+            if content is not None else []
+        )
+        self.usage = usage
+
+
+class FakeStreamingOpenAI:
+    def __init__(self, chunks):
+        self._chunks = chunks
+        self.calls = []
+        self.chat = type("Chat", (), {"completions": self})()
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return iter(self._chunks)
+
+
+class TestStream:
+    def test_yields_content_deltas_skipping_empty(self):
+        fake = FakeStreamingOpenAI([_Chunk("Hel"), _Chunk("lo"), _Chunk(None), _Chunk("!")])
+        llm = LLMClient(api_key="k", model="m", client=fake)
+        assert list(llm.stream("q", system="s")) == ["Hel", "lo", "!"]
+        assert fake.calls[0]["stream"] is True
+
+    def test_records_usage_from_final_chunk(self):
+        fake = FakeStreamingOpenAI([_Chunk("hi"), _Chunk(None, usage=_Usage(3, 4, 7))])
+        llm = LLMClient(api_key="k", model="m", client=fake)
+        list(llm.stream("q"))
+        assert llm.last_usage is not None and llm.last_usage.total_tokens == 7
