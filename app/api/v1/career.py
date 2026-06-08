@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.api import deps
 from app.services.agent.schemas import JdInput, ReactState
+from app.services.agent.sessions import ChatMessage
+from app.services.agent.slash import is_slash, handle_slash
 from app.services.agent.tools import build_default_agent
 from app.services.agent.trace import steps_as_dicts
 from app.skills.career_match import CareerMatchResult, run_career_match
@@ -121,4 +123,143 @@ async def career_ask_endpoint(request: CareerAskRequest):
         answer=result.answer,
         completed=result.completed,
         steps=steps_as_dicts(result.steps),
+    )
+
+
+# ── Conversational chat (multi-turn, persistent state, slash commands) ──────
+
+
+class ChatRequest(BaseModel):
+    """One chat turn. ``session_id`` is null on the first turn (a new session is
+    created and returned). Optional JD/resume text seeds or updates the session;
+    a message starting with ``/`` runs a slash command, otherwise it drives the
+    ReAct agent."""
+
+    message: str = Field(..., min_length=1, description="The user's message")
+    session_id: str | None = Field(None, description="Returned by the first turn")
+    resume_text: str | None = Field(None, description="Seed/replace the resume")
+    jd_text: str | None = Field(None, description="Seed/replace the JD (single)")
+    jds: list[JdInputModel] = Field(default_factory=list, description="Seed JDs")
+    max_steps: int = Field(12, ge=1, le=20, description="Agent step budget")
+
+
+class ChatTurn(BaseModel):
+    role: str
+    content: str
+
+
+class ChatResponse(BaseModel):
+    status: str = "success"
+    session_id: str
+    reply: str
+    state: str  # "answered" | "awaiting_user" | "incomplete"
+    steps: list[dict] = Field(default_factory=list)
+    history: list[ChatTurn] = Field(default_factory=list)
+
+
+def _seed_state(request: "ChatRequest") -> ReactState:
+    """Build a fresh session state from the request's inputs."""
+    jd_inputs = [
+        JdInput(label=j.label or f"Job {chr(65 + i)}", text=j.text)
+        for i, j in enumerate(request.jds)
+    ]
+    if not jd_inputs and request.jd_text:
+        jd_inputs = [JdInput(label="Job A", text=request.jd_text)]
+    return ReactState(
+        jd_text=request.jd_text or (jd_inputs[0].text if jd_inputs else None),
+        resume_text=request.resume_text,
+        jd_inputs=jd_inputs,
+        embedding_service=deps.get_embedding_service(),
+        kb_retriever=_kb_retriever_or_none(),
+        llm=deps.get_llm(),
+    )
+
+
+def _apply_updates(state: ReactState, request: "ChatRequest") -> None:
+    """Apply new JD/resume text to an existing session, invalidating stale parses."""
+    if request.resume_text and request.resume_text != state.resume_text:
+        state.resume_text = request.resume_text
+        state.resume = None
+        state.match = None
+    if request.jds:
+        state.jd_inputs = [
+            JdInput(label=j.label or f"Job {chr(65 + i)}", text=j.text)
+            for i, j in enumerate(request.jds)
+        ]
+        state.jd_text = state.jd_inputs[0].text
+        state.jd = state.match = None
+        state.comparison = []
+    elif request.jd_text and request.jd_text != state.jd_text:
+        state.jd_text = request.jd_text
+        state.jd_inputs = [JdInput(label="Job A", text=request.jd_text)]
+        state.jd = state.match = None
+
+
+@router.post("/career/chat", response_model=ChatResponse)
+async def career_chat_endpoint(request: ChatRequest):
+    """Multi-turn conversational entry point.
+
+    Maintains a server-side session (parsed JD/resume/match + history). Slash
+    commands (``/match``, ``/report``, ``/prep``, ``/audit``, ``/compare``) run
+    the deterministic pipeline; free text drives the ReAct agent, which may pause
+    to ask the user a question (``state == "awaiting_user"``) and resume on the
+    next turn with the reply.
+    """
+    store = deps.get_session_store()
+    session = store.get(request.session_id)
+    if session is None:
+        session = store.create(_seed_state(request))
+    else:
+        _apply_updates(session.state, request)
+
+    message = request.message.strip()
+    session.history.append(ChatMessage(role="user", content=message))
+
+    steps: list[dict] = []
+    if session.awaiting_user:
+        # The message answers the agent's pending question: resume the run.
+        llm = deps.get_llm()
+        if not llm.is_configured():
+            raise HTTPException(status_code=503, detail="The agent requires a configured LLM.")
+        session.pending_steps[-1].observation = message
+        agent = build_default_agent(llm, max_steps=request.max_steps)
+        result = agent.run(session.pending_task, session.state, steps=session.pending_steps)
+        steps = steps_as_dicts(result.steps)
+        reply, status = _resolve(result, session)
+    elif is_slash(message):
+        reply = handle_slash(message, session.state)
+        status = "answered"
+    else:
+        llm = deps.get_llm()
+        if not llm.is_configured():
+            raise HTTPException(status_code=503, detail="The agent requires a configured LLM.")
+        agent = build_default_agent(llm, max_steps=request.max_steps)
+        result = agent.run(message, session.state)
+        steps = steps_as_dicts(result.steps)
+        reply, status = _resolve(result, session, task=message)
+
+    session.history.append(ChatMessage(role="assistant", content=reply))
+    return ChatResponse(
+        session_id=session.session_id,
+        reply=reply,
+        state=status,
+        steps=steps,
+        history=[ChatTurn(role=m.role, content=m.content) for m in session.history],
+    )
+
+
+def _resolve(result, session, task: str | None = None) -> tuple[str, str]:
+    """Translate a ReactResult into (reply, status) and update session pending state."""
+    if result.pending_question is not None:
+        session.pending_question = result.pending_question
+        session.pending_task = task if task is not None else session.pending_task
+        session.pending_steps = result.steps
+        return result.pending_question, "awaiting_user"
+
+    session.clear_pending()
+    if result.completed:
+        return result.answer, "answered"
+    return (
+        result.answer or "I couldn't finish within the step budget — try rephrasing.",
+        "incomplete",
     )

@@ -8,13 +8,13 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 
 - Backend: FastAPI service with versioned APIs under `/api/v1`
 - Retrieval: BM25, vector, hybrid fusion, and optional reranking
-- Agent: ReAct loop (Reason → Act → Observe) over the tools (incl. KB search, advice, bullet rewriting), with step tracing; exposed for open-ended Q&A at `POST /api/v1/career/ask`
+- Agent: ReAct loop (Reason → Act → Observe) over the tools (incl. KB search, advice, bullet rewriting, multi-JD comparison), with step tracing and an `ask_user` pause/resume action; exposed for one-shot Q&A (`POST /api/v1/career/ask`) and a multi-turn chat with persistent state + slash commands (`POST /api/v1/career/chat`)
 - LLM: optional OpenAI-compatible client with deterministic fallback
 - MCP: stdio server exposing the core tools
 - Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
-- Frontend: minimal static UI served at `/ui/` (paste resume + one or more JDs → match report, RAG interview prep, or ask the ReAct agent and watch its reasoning trace)
-- Tests: `457 passed` with Postgres up (`456 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
+- Frontend: minimal static chat UI served at `/ui/` — paste a resume + one or more JDs, then chat with the agent (free text) or use slash commands (`/match`, `/report`, `/prep`, `/audit`, `/compare`), with the reasoning trace expandable per reply
+- Tests: `476 passed` with Postgres up (`475 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
@@ -98,7 +98,7 @@ career-agent-rag/
 │   │       ├── resume.py    # POST /api/v1/resume/parse
 │   │       ├── match.py     # POST /api/v1/match, /api/v1/match/report
 │   │       ├── audit.py     # POST /api/v1/audit
-│   │       ├── career.py    # POST /api/v1/career-match (end-to-end), /api/v1/career/ask (ReAct agent)
+│   │       ├── career.py    # POST /api/v1/career-match (end-to-end), /career/ask (agent), /career/chat (multi-turn)
 │   │       └── interview.py # POST /api/v1/interview-prep (RAG)
 │   ├── models/              # Pydantic data schemas
 │   │   ├── jd.py
@@ -122,8 +122,10 @@ career-agent-rag/
 │   │   ├── knowledge.py          # KB loading + in-memory KB retriever
 │   │   ├── interview_prep.py     # RAG interview prep (retrieve KB → grounded guide)
 │   │   ├── agent/               # ReAct agent
-│   │   │   ├── react_controller.py # ReactAgent (Thought→Action→Observation loop)
+│   │   │   ├── react_controller.py # ReactAgent (Thought→Action→Observation loop, ask_user pause/resume)
 │   │   │   ├── tools.py            # Default ReAct tools over shared state (parse/match/rank/audit/report + kb_search/interview_prep/advise/rewrite_bullet + compare_jds/select_jd)
+│   │   │   ├── slash.py            # Deterministic slash commands (/match, /report, /prep, /audit, /compare)
+│   │   │   ├── sessions.py         # In-memory chat sessions (persistent ReactState + history)
 │   │   │   ├── schemas.py          # ReactState / ReactTool / ReactStep / ReactResult / ReactDecision
 │   │   │   └── trace.py            # Scratchpad rendering + step serialization
 │   │   └── retrieval/            # Retrieval backends (shared interface)
@@ -201,6 +203,7 @@ career-agent-rag/
 │       ├── agent/
 │       │   ├── test_react.py
 │       │   ├── test_tools.py
+│       │   ├── test_slash.py
 │       │   └── test_trace.py
 │       └── retrieval/
 │           ├── test_bm25_retriever.py
@@ -235,7 +238,8 @@ career-agent-rag/
 | POST | `/api/v1/match/report` | Generate matching report (incl. risk audit) |
 | POST | `/api/v1/audit` | Audit a resume for authenticity / quality risks |
 | POST | `/api/v1/career-match` | End-to-end: parse + match + rank + audit + report from raw text |
-| POST | `/api/v1/career/ask` | Open-ended Q&A over a resume + one or more JDs: the ReAct agent picks tools dynamically (incl. multi-JD comparison); returns answer + reasoning trace |
+| POST | `/api/v1/career/ask` | One-shot Q&A over a resume + one or more JDs: the ReAct agent picks tools dynamically (incl. multi-JD comparison); returns answer + reasoning trace |
+| POST | `/api/v1/career/chat` | Multi-turn chat: persistent session (parsed JD/resume/match + history), slash commands for the deterministic pipeline, and an agent that can pause to ask the user (`awaiting_user`) and resume |
 | POST | `/api/v1/interview-prep` | RAG: retrieve interview questions from the KB + grounded prep guide |
 | GET | `/ui/` | Minimal browser UI |
 
@@ -302,6 +306,17 @@ Where the deterministic `/career-match` pipeline always runs the *same* fixed st
 For **multi-JD** questions (*"which of these roles should I apply to?"*), the agent calls `compare_jds` — it parses and matches every candidate JD (seeded in `jd_inputs`) against the resume and ranks them best-first — then `select_jd` promotes the chosen role into the active `jd` / `match` so the single-JD tools (`rank_projects`, `advise`, `rewrite_bullet`, …) tailor the resume to it. The number of comparison rounds is data-driven, which is exactly what a fixed endpoint can't express.
 
 This is surfaced as `POST /api/v1/career/ask` (`{question, resume_text, jd_text}` or `{question, resume_text, jds: [{text, label}]}` → `{answer, completed, steps}`): the endpoint seeds a `ReactState` (candidate JDs, embedding service, KB retriever, LLM) and returns the agent's answer plus its full Thought/Action/Observation trace for transparency. The deterministic endpoints stay untouched — the agent is an additional entry point for free-form questions, not a replacement for the fixed pipeline.
+
+### Conversational chat (`/career/chat`)
+
+`POST /api/v1/career/chat` turns the agent into a multi-turn assistant. A process-local session (`sessions.py`) holds the **persistent `ReactState`** — so parsing/matching done on one turn (by a tool *or* a slash command) is reused on the next instead of recomputed — plus the conversation history. The first turn seeds the resume/JD(s) and returns a `session_id`; later turns send just the id and a message.
+
+Two input styles share that one session state:
+
+- **Slash commands** (`slash.py`) — `/match`, `/report`, `/prep [role] [difficulty]`, `/audit`, `/compare`, `/help` — call the **deterministic pipeline directly**. They're cheap, reproducible, and work even with no LLM configured. This keeps the deterministic-core invariant visible in the product: shortcuts for the fixed analyses, the agent for everything open-ended.
+- **Free text** drives the **ReAct agent**, which can now also emit an `ask_user` action: it **pauses** mid-loop (`state == "awaiting_user"`, returning the question), and the next user message **resumes** the same run with the reply folded in as the observation. This is what makes genuinely interactive flows possible — mock-interview follow-ups, or rewriting a resume bullet after asking the user for the missing metric — rather than one-shot answers.
+
+The response carries `{session_id, reply, state, steps, history}`, so the UI renders the conversation and an expandable reasoning trace per agent turn.
 
 The agent is LLM-driven by design (it requires a configured LLM); decisions are parsed as strict JSON via the same `extract_json` helper, and a malformed/unknown reply becomes a recoverable observation rather than a crash. Note the deterministic-core invariant still holds: the tools call the same services, so scores/rankings/findings are computed deterministically — the LLM only decides *which* steps to take.
 

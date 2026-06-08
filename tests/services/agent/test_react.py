@@ -34,6 +34,11 @@ def _final(answer):
     return json.dumps({"thought": "done", "final_answer": answer})
 
 
+def _ask(question):
+    return json.dumps({"thought": "need info", "action": "ask_user",
+                       "action_input": {"question": question}})
+
+
 def _echo_tool():
     return ReactTool("echo", "echo back", lambda state, args: f"echoed {args.get('x')}")
 
@@ -134,6 +139,36 @@ class TestReactLoop:
         ReactAgent(llm, [_echo_tool()]).run("analyze this", _state())
         assert "analyze this" in llm.prompts[0]
         assert "echo" in llm.prompts[0]
+
+    def test_ask_user_pauses(self):
+        llm = ScriptedLLM([_act("echo", x="hi"), _ask("What is your impact?"), _final("x")])
+        result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
+        assert result.completed is False
+        assert result.pending_question == "What is your impact?"
+        # The last step is the pending ask_user with an empty observation.
+        assert result.steps[-1].action == "ask_user"
+        assert result.steps[-1].observation == ""
+
+    def test_ask_user_resume(self):
+        # First run pauses on ask_user.
+        llm = ScriptedLLM([_ask("impact?"), _final("done with 40% speedup")])
+        agent = ReactAgent(llm, [_echo_tool()])
+        first = agent.run("task", _state())
+        assert first.pending_question == "impact?"
+        # Caller fills the user's reply into the pending step, then resumes.
+        first.steps[-1].observation = "cut latency 40%"
+        resumed = agent.run("task", _state(), steps=first.steps)
+        assert resumed.completed is True
+        assert resumed.answer == "done with 40% speedup"
+        # The reply is visible in the scratchpad fed back to the model.
+        assert "cut latency 40%" in llm.prompts[-1]
+
+    def test_ask_user_without_question_is_error(self):
+        bad = json.dumps({"thought": "?", "action": "ask_user", "action_input": {}})
+        llm = ScriptedLLM([bad, _final("ok")])
+        result = ReactAgent(llm, [_echo_tool()]).run("task", _state())
+        assert "ask_user requires" in result.steps[0].observation
+        assert result.completed is True
 
     def test_non_dict_action_input_ignored(self):
         # action_input not a dict → treated as empty, tool still runs.

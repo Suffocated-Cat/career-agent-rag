@@ -34,7 +34,12 @@ _SYSTEM = (
     "You are a career-analysis ReAct agent. Solve the task by reasoning step by "
     "step and calling tools. At each step respond with STRICT JSON, either:\n"
     '  {"thought": "...", "action": "<tool_name>", "action_input": {...}}\n'
-    "to call a tool, or:\n"
+    "to call a tool,\n"
+    '  {"thought": "...", "action": "ask_user", "action_input": {"question": "..."}}\n'
+    "to ask the user a clarifying question when you genuinely need information "
+    "only they can provide (e.g. missing metrics for a resume bullet, or their "
+    "answer in a mock interview) — don't use it for things the tools can find, "
+    "or:\n"
     '  {"thought": "...", "final_answer": "..."}\n'
     "when the task is complete. Use only the listed tools. If an observation "
     "reports an error, reason about it and recover. The JD(s) and resume are "
@@ -94,17 +99,25 @@ class ReactAgent:
         lines += ["", "Respond with the next step as JSON."]
         return "\n".join(lines)
 
-    def run(self, task: str, state: ReactState) -> ReactResult:
-        """Run the ReAct loop until a final answer or the step budget.
+    def run(
+        self,
+        task: str,
+        state: ReactState,
+        steps: list[ReactStep] | None = None,
+    ) -> ReactResult:
+        """Run the ReAct loop until a final answer, an ask_user pause, or budget.
 
         Args:
             task: The natural-language task.
             state: Working memory (seed jd_text/resume_text and the embedding
                 service / llm the tools should use).
+            steps: Prior steps to resume from (for multi-turn). To resume after
+                an ask_user pause, set the last step's ``observation`` to the
+                user's reply, then pass the steps back here.
 
         Returns:
-            A ReactResult with the final answer, the recorded steps, and whether
-            it completed within the step budget.
+            A ReactResult that either completed (final answer), paused
+            (``pending_question`` set), or ran out of budget.
 
         Raises:
             RuntimeError: If the LLM is not configured.
@@ -112,8 +125,8 @@ class ReactAgent:
         if not self.llm.is_configured():
             raise RuntimeError("ReactAgent requires a configured LLM.")
 
-        steps: list[ReactStep] = []
-        for _ in range(self.max_steps):
+        steps = steps if steps is not None else []
+        while len(steps) < self.max_steps:
             raw = self.llm.complete(self._prompt(task, steps, state), system=_SYSTEM)
 
             try:
@@ -137,6 +150,23 @@ class ReactAgent:
             action_input = (
                 decision.action_input if isinstance(decision.action_input, dict) else {}
             )
+
+            # ask_user is a control action, not a tool: pause and hand back the
+            # question. The caller resumes by filling this step's observation
+            # with the user's reply and calling run() again with these steps.
+            if decision.action == "ask_user":
+                question = str(action_input.get("question", "")).strip()
+                if not question:
+                    steps.append(
+                        ReactStep(decision.thought, "ask_user", action_input,
+                                  "Error: ask_user requires action_input.question.")
+                    )
+                    continue
+                steps.append(ReactStep(decision.thought, "ask_user", action_input, ""))
+                return ReactResult(
+                    answer="", steps=steps, completed=False, pending_question=question
+                )
+
             if decision.action is None:
                 steps.append(
                     ReactStep(decision.thought, None, {}, "Error: provide 'action' or 'final_answer'.")

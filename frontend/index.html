@@ -9,34 +9,53 @@
             --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --line:#334155; }
     * { box-sizing: border-box; }
     body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
-    header { padding:20px 24px; border-bottom:1px solid var(--line); }
+    header { padding:20px 24px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
     h1 { margin:0; font-size:20px; } h1 span { color:var(--accent); }
     .sub { color:var(--muted); font-size:13px; margin-top:4px; }
-    main { max-width:980px; margin:0 auto; padding:24px; display:grid; gap:20px; }
+    main { max-width:980px; margin:0 auto; padding:24px; display:grid; gap:18px; }
     .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
     @media (max-width:760px){ .grid{ grid-template-columns:1fr; } }
     label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
-    textarea { width:100%; min-height:200px; resize:vertical; background:var(--card);
-      color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:12px; font:13px/1.5 ui-monospace, monospace; }
+    textarea { width:100%; resize:vertical; background:var(--card); color:var(--fg);
+      border:1px solid var(--line); border-radius:8px; padding:12px; font:13px/1.5 ui-monospace, monospace; }
+    #resume { min-height:170px; }
     button { background:var(--accent); color:#06283d; border:0; border-radius:8px;
       padding:11px 20px; font-weight:600; font-size:15px; cursor:pointer; }
     button:disabled { opacity:.6; cursor:default; }
+    button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line);
+      padding:5px 11px; font-size:13px; font-weight:600; }
+    button.ghost:disabled { color:var(--muted); }
     .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; }
-    .card h2 { margin:0 0 12px; font-size:15px; }
-    .score { font-size:34px; font-weight:700; }
-    .rating { font-size:13px; color:var(--muted); }
-    .chips { display:flex; flex-wrap:wrap; gap:6px; }
-    .chip { font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--line); }
-    .chip.ok { color:var(--ok); border-color:#14532d; }
-    .chip.bad { color:var(--bad); border-color:#7f1d1d; }
-    .rel { display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-bottom:1px solid var(--line); font-size:13px; }
-    .rel:last-child { border-bottom:0; }
-    .bar { height:6px; background:#0b1220; border-radius:4px; overflow:hidden; margin-top:2px; }
-    .bar > i { display:block; height:100%; background:var(--accent); }
-    .finding { font-size:13px; padding:6px 0; border-bottom:1px solid var(--line); }
-    .finding:last-child { border-bottom:0; }
-    .sev { font-size:11px; text-transform:uppercase; font-weight:700; margin-right:6px; }
-    .sev.high{color:var(--bad);} .sev.medium{color:var(--warn);} .sev.low{color:var(--muted);}
+    details > summary { cursor:pointer; font-size:14px; color:var(--fg); list-style:none; }
+    details > summary::-webkit-details-marker { display:none; }
+    details > summary::before { content:"▸ "; color:var(--accent); }
+    details[open] > summary::before { content:"▾ "; }
+    .jd-head { display:flex; justify-content:space-between; align-items:center; margin:14px 0 6px; }
+    .jd-head label { margin:0; }
+    .jd-slot { margin-bottom:10px; }
+    .jd-slot-head { display:flex; gap:8px; margin-bottom:6px; }
+    .jd-label { flex:1; background:var(--card); color:var(--fg); border:1px solid var(--line);
+      border-radius:8px; padding:7px 10px; font:13px system-ui, sans-serif; }
+    .jd-remove { background:transparent; color:var(--muted); border:1px solid var(--line);
+      border-radius:8px; padding:0 11px; font-size:14px; cursor:pointer; }
+    .jd-slot textarea { min-height:130px; }
+
+    .chat { display:flex; flex-direction:column; gap:12px; min-height:120px; }
+    .msg { max-width:86%; padding:10px 14px; border-radius:12px; }
+    .msg.user { align-self:flex-end; background:#0b3a52; }
+    .msg.assistant { align-self:flex-start; background:var(--card); border:1px solid var(--line); }
+    .msg .role { font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.04em; }
+    .msg .body { white-space:pre-wrap; }
+    .msg.assistant .body { white-space:normal; }
+    .composer { display:flex; gap:10px; align-items:flex-end; }
+    .composer textarea { min-height:52px; font:14px/1.5 system-ui, sans-serif; }
+    .hint { color:var(--muted); font-size:12px; }
+    .trace-toggle { cursor:pointer; color:var(--accent); font-size:12px; margin-top:8px; user-select:none; }
+    .trace-step { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:8px 0 0; }
+    .trace-step .th { font-size:13px; margin-bottom:5px; }
+    .trace-step .act { color:var(--accent); font:12px/1.5 ui-monospace, monospace; word-break:break-word; }
+    .trace-step .obs { color:var(--muted); font-size:12px; margin-top:5px; white-space:pre-wrap; }
+
     pre { white-space:pre-wrap; background:#0b1220; border:1px solid var(--line); border-radius:8px;
       padding:14px; font:12px/1.55 ui-monospace, monospace; overflow-x:auto; }
     .md h1 { font-size:18px; margin:14px 0 8px; }
@@ -52,108 +71,50 @@
     .md em { color:var(--muted); }
     .muted { color:var(--muted); } .err { color:var(--bad); }
     .hidden { display:none; }
-    #results { display:grid; gap:20px; }
-    #results.hidden { display:none; }
-    #prep { display:grid; gap:20px; }
-    #prep.hidden { display:none; }
-    .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-    input#role, select#difficulty { background:var(--card); color:var(--fg);
-      border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:14px system-ui, sans-serif; }
-    input#role { min-width:220px; }
-    #prep-questions { margin:0; padding-left:20px; } #prep-questions li { margin:3px 0; }
-    #agent { display:grid; gap:20px; } #agent.hidden { display:none; }
-    button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line);
-      padding:5px 11px; font-size:13px; font-weight:600; }
-    button.ghost:disabled { color:var(--muted); }
-    .jd-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-    .jd-head label { margin:0; }
-    .jd-slot { margin-bottom:10px; }
-    .jd-slot-head { display:flex; gap:8px; margin-bottom:6px; }
-    .jd-label { flex:1; background:var(--card); color:var(--fg); border:1px solid var(--line);
-      border-radius:8px; padding:7px 10px; font:13px system-ui, sans-serif; }
-    .jd-remove { background:transparent; color:var(--muted); border:1px solid var(--line);
-      border-radius:8px; padding:0 11px; font-size:14px; cursor:pointer; }
-    .jd-slot textarea { min-height:150px; }
-    .trace-step { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
-    .trace-step .th { font-size:13px; margin-bottom:5px; }
-    .trace-step .act { color:var(--accent); font:12px/1.5 ui-monospace, monospace; word-break:break-word; }
-    .trace-step .obs { color:var(--muted); font-size:12px; margin-top:5px; white-space:pre-wrap; }
   </style>
 </head>
 <body>
   <header>
-    <h1>Career<span>Agent</span></h1>
-    <div class="sub">Paste a resume and one or more job descriptions — get a match report, RAG interview prep, or ask the ReAct agent.</div>
+    <div>
+      <h1>Career<span>Agent</span></h1>
+      <div class="sub">Chat with the ReAct agent over your resume + JD(s). Try <code>/match</code>, <code>/report</code>, <code>/prep</code>, <code>/audit</code>, <code>/compare</code>, or just ask.</div>
+    </div>
+    <button id="reset" class="ghost" type="button">New chat</button>
   </header>
 
   <main>
-    <div class="grid">
-      <div>
-        <div class="jd-head">
-          <label>Job description(s)</label>
-          <button id="add-jd" class="ghost" type="button">+ Add JD</button>
+    <details id="context" class="card" open>
+      <summary>Context — resume &amp; job description(s)</summary>
+      <div class="grid" style="margin-top:14px;">
+        <div>
+          <label for="resume">Resume</label>
+          <textarea id="resume" placeholder="Paste the resume text..."></textarea>
         </div>
-        <div id="jd-list"></div>
+        <div>
+          <div class="jd-head">
+            <label>Job description(s)</label>
+            <button id="add-jd" class="ghost" type="button">+ Add JD</button>
+          </div>
+          <div id="jd-list"></div>
+        </div>
       </div>
-      <div>
-        <label for="resume">Resume</label>
-        <textarea id="resume" placeholder="Paste the resume text..."></textarea>
-      </div>
-    </div>
-    <div class="controls">
-      <button id="run">Match report</button>
-      <button id="prep-run">Interview prep</button>
-      <input id="role" type="text" placeholder="prep roles (optional, e.g. backend)" />
-      <select id="difficulty">
-        <option value="">Any difficulty</option>
-        <option value="junior">junior</option>
-        <option value="mid">mid</option>
-        <option value="senior">senior</option>
-      </select>
-      <span id="status" class="muted"></span>
-    </div>
+      <div class="hint" style="margin-top:6px;">Edit anytime — changes apply on your next message. Add a second JD to compare roles.</div>
+    </details>
 
-    <div class="card">
-      <h2>Ask the agent</h2>
-      <label for="question">Question</label>
-      <textarea id="question" style="min-height:80px;"
-        placeholder="e.g. Why isn't my match higher, and how do I fix it?  •  Which of these roles should I apply to?  •  Help me prep for the interview."></textarea>
-      <div class="controls" style="margin-top:10px;">
-        <button id="ask-run">Ask agent</button>
-        <span class="muted" style="font-size:12px;">Uses the resume + JD slot(s) above. Two or more JDs → the agent compares them.</span>
-      </div>
-    </div>
+    <div id="chat" class="chat"></div>
 
-    <div id="agent" class="hidden">
-      <div class="card"><h2>Answer</h2><div id="agent-answer" class="md"></div></div>
-      <div class="card"><h2>Reasoning trace</h2><div id="agent-trace"></div></div>
+    <div class="composer">
+      <textarea id="msg" placeholder="Ask a question, or type a /command…"></textarea>
+      <button id="send">Send</button>
     </div>
-
-    <div id="prep" class="hidden">
-      <div class="card"><h2>Skill gaps</h2><div class="chips" id="prep-gaps"></div></div>
-      <div class="card"><h2>Likely questions</h2><ul id="prep-questions"></ul></div>
-      <div class="card"><h2>Prep guide</h2><div id="prep-guide" class="md"></div></div>
-    </div>
-
-    <div id="results" class="hidden">
-      <div class="card">
-        <h2>Overall</h2>
-        <div class="score" id="score">–</div>
-        <div class="rating" id="rating"></div>
-      </div>
-      <div class="grid">
-        <div class="card"><h2>Matched skills</h2><div class="chips" id="matched"></div></div>
-        <div class="card"><h2>Missing skills</h2><div class="chips" id="missing"></div></div>
-      </div>
-      <div class="card"><h2>Most relevant experience</h2><div id="relevance"></div></div>
-      <div class="card"><h2>Risk audit</h2><div id="audit"></div></div>
-      <div class="card"><h2>Report</h2><div id="report" class="md"></div></div>
-    </div>
+    <div id="status" class="hint"></div>
   </main>
 
   <script>
     const $ = (id) => document.getElementById(id);
     const MAX_JDS = 3;
+    let sessionId = null;
+    let lastContext = null;
 
     // ── Multi-JD slots ────────────────────────────────────────────────
     function jdSlotCount() { return $("jd-list").querySelectorAll(".jd-slot").length; }
@@ -163,204 +124,122 @@
       if (i >= MAX_JDS) return;
       const slot = document.createElement("div");
       slot.className = "jd-slot";
-      const letter = String.fromCharCode(65 + i); // A, B, C
+      const letter = String.fromCharCode(65 + i);
       slot.innerHTML = `
         <div class="jd-slot-head">
           <input class="jd-label" placeholder="Job ${letter} (optional label)" />
           <button class="jd-remove" type="button" title="Remove this JD">✕</button>
         </div>
         <textarea class="jd-text" placeholder="Paste the JD text..."></textarea>`;
-      slot.querySelector(".jd-remove").addEventListener("click", () => {
-        slot.remove();
-        refreshJdControls();
-      });
+      slot.querySelector(".jd-remove").addEventListener("click", () => { slot.remove(); refreshJdControls(); });
       $("jd-list").appendChild(slot);
       refreshJdControls();
     }
-
-    // The first slot can't be removed; the add button caps at MAX_JDS.
     function refreshJdControls() {
       const slots = $("jd-list").querySelectorAll(".jd-slot");
-      slots.forEach((s, idx) => {
-        s.querySelector(".jd-remove").style.visibility = idx === 0 ? "hidden" : "visible";
-      });
+      slots.forEach((s, idx) => { s.querySelector(".jd-remove").style.visibility = idx === 0 ? "hidden" : "visible"; });
       $("add-jd").disabled = slots.length >= MAX_JDS;
     }
-
-    // [{label, text}] for non-empty slots (label omitted when blank).
     function getJds() {
       return [...$("jd-list").querySelectorAll(".jd-slot")].map((s) => ({
         label: s.querySelector(".jd-label").value.trim(),
         text: s.querySelector(".jd-text").value.trim(),
       })).filter((j) => j.text);
     }
-    function firstJd() { const j = getJds(); return j.length ? j[0].text : ""; }
 
-    async function analyze() {
-      const jd = firstJd();
-      const resume = $("resume").value.trim();
-      if (!jd || !resume) { setStatus("Enter both a job description and a resume.", true); return; }
+    // ── Chat ──────────────────────────────────────────────────────────
+    function currentContext() { return { resume_text: $("resume").value.trim(), jds: getJds() }; }
 
-      $("run").disabled = true;
-      setStatus("Analyzing… (parsing, matching, auditing, generating report)");
+    async function send() {
+      const message = $("msg").value.trim();
+      if (!message) return;
+      const ctx = currentContext();
+      if (!sessionId && (!ctx.resume_text || !ctx.jds.length)) {
+        setStatus("Add a resume and at least one JD to start.", true); return;
+      }
+
+      const payload = { message };
+      if (sessionId) payload.session_id = sessionId;
+      // Send context on the first turn, or whenever it changed since last send.
+      const ctxKey = JSON.stringify(ctx);
+      if (!sessionId || ctxKey !== lastContext) {
+        payload.resume_text = ctx.resume_text;
+        if (ctx.jds.length === 1) payload.jd_text = ctx.jds[0].text;
+        else if (ctx.jds.length > 1) payload.jds = ctx.jds.map((j) => (j.label ? { text: j.text, label: j.label } : { text: j.text }));
+        lastContext = ctxKey;
+      }
+
+      appendMsg("user", message);
+      $("msg").value = "";
+      $("send").disabled = true;
+      setStatus("Working…");
       try {
-        const res = await fetch("/api/v1/career-match", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jd_text: jd, resume_text: resume }),
+        const res = await fetch("/api/v1/career/chat", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
         });
         const body = await res.json();
         if (!res.ok || body.status === "error") {
           throw new Error(body.error ? body.error.message : "Request failed (" + res.status + ")");
         }
-        render(body.data);
-        setStatus("Done.");
+        sessionId = body.session_id;
+        appendAssistant(body);
+        setStatus(body.state === "awaiting_user" ? "The agent asked a question — reply below to continue." : "");
+        if ($("context").open) $("context").open = false; // tuck the context away once chatting
       } catch (e) {
         setStatus(e.message, true);
       } finally {
-        $("run").disabled = false;
+        $("send").disabled = false; $("msg").focus();
       }
     }
 
-    function setStatus(msg, isErr) {
-      const el = $("status");
-      el.textContent = msg;
-      el.className = isErr ? "err" : "muted";
+    function appendMsg(role, content) {
+      const el = document.createElement("div");
+      el.className = "msg " + role;
+      const body = role === "assistant" ? `<div class="body md">${renderMarkdown(content)}</div>`
+                                        : `<div class="body">${escapeHtml(content)}</div>`;
+      el.innerHTML = `<div class="role">${role === "assistant" ? "agent" : "you"}</div>${body}`;
+      $("chat").appendChild(el);
+      el.scrollIntoView({ behavior: "smooth", block: "end" });
+      return el;
     }
 
-    function chips(container, items, cls) {
-      container.innerHTML = items.length
-        ? items.map((s) => `<span class="chip ${cls}">${escapeHtml(s)}</span>`).join("")
-        : '<span class="muted">none</span>';
-    }
-
-    function render(data) {
-      const report = data.report, match = data.match;
-      $("results").classList.remove("hidden");
-
-      $("score").textContent = report.overall_score.toFixed(2) + " / 1.00";
-      $("rating").textContent = report.overall_rating + " — " + report.skill_summary;
-
-      chips($("matched"), report.matched_skills, "ok");
-      chips($("missing"), report.missing_skills, "bad");
-
-      const rel = match.project_relevance || [];
-      $("relevance").innerHTML = rel.length
-        ? rel.map((r) => `
-            <div class="rel"><span>${escapeHtml(r.label)}</span><span>${r.normalized_score.toFixed(2)}</span></div>
-            <div class="bar"><i style="width:${Math.round(r.normalized_score * 100)}%"></i></div>`).join("")
-        : '<span class="muted">No ranked experiences.</span>';
-
-      const audit = match.project_audit || { findings: [], summary: "", advice: "" };
-      let html = `<div class="muted" style="margin-bottom:8px;">${escapeHtml(audit.summary || "")}</div>`;
-      html += (audit.findings || []).map((f) => `
-        <div class="finding"><span class="sev ${f.severity}">${f.severity}</span>
-        ${escapeHtml(f.subject)} — ${escapeHtml(f.detail)}</div>`).join("");
-      if (audit.advice) html += `<div class="md" style="margin-top:10px;">${renderMarkdown(audit.advice)}</div>`;
-      $("audit").innerHTML = html || '<span class="muted">No risks detected.</span>';
-
-      $("report").innerHTML = renderMarkdown(report.full_report || "");
-    }
-
-    async function interviewPrep() {
-      const jd = firstJd();
-      const resume = $("resume").value.trim();
-      if (!jd || !resume) { setStatus("Enter both a job description and a resume.", true); return; }
-      const roleRaw = $("role").value.trim();
-      const role = roleRaw ? roleRaw.split(",").map((s) => s.trim()).filter(Boolean) : null;
-      const difficulty = $("difficulty").value || null;
-
-      $("prep-run").disabled = true;
-      setStatus("Generating interview prep… (retrieving from the knowledge base)");
-      try {
-        const res = await fetch("/api/v1/interview-prep", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jd_text: jd, resume_text: resume, role, difficulty }),
-        });
-        const body = await res.json();
-        if (!res.ok || body.status === "error") {
-          throw new Error(body.error ? body.error.message : "Request failed (" + res.status + ")");
-        }
-        renderPrep(body.data);
-        setStatus("Done.");
-      } catch (e) {
-        setStatus(e.message, true);
-      } finally {
-        $("prep-run").disabled = false;
-      }
-    }
-
-    async function askAgent() {
-      const question = $("question").value.trim();
-      const resume = $("resume").value.trim();
-      const jds = getJds();
-      if (!question) { setStatus("Enter a question for the agent.", true); return; }
-      if (!resume || !jds.length) { setStatus("Enter a resume and at least one JD.", true); return; }
-
-      // One JD → single-JD path; several → let the agent compare them.
-      const payload = { question, resume_text: resume };
-      if (jds.length === 1) payload.jd_text = jds[0].text;
-      else payload.jds = jds.map((j) => (j.label ? { text: j.text, label: j.label } : { text: j.text }));
-
-      $("ask-run").disabled = true;
-      setStatus("Agent is reasoning… (it picks tools step by step)");
-      try {
-        const res = await fetch("/api/v1/career/ask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const body = await res.json();
-        if (!res.ok || body.status === "error") {
-          throw new Error(body.error ? body.error.message : "Request failed (" + res.status + ")");
-        }
-        renderAgent(body);
-        setStatus(body.completed ? "Done." : "Stopped at the step budget — try raising it or simplifying the question.", !body.completed);
-      } catch (e) {
-        setStatus(e.message, true);
-      } finally {
-        $("ask-run").disabled = false;
-      }
-    }
-
-    function renderAgent(body) {
-      $("agent").classList.remove("hidden");
-      $("agent-answer").innerHTML = body.answer
-        ? renderMarkdown(body.answer)
-        : '<span class="muted">No answer was produced.</span>';
+    function appendAssistant(body) {
+      const el = appendMsg("assistant", body.reply);
       const steps = body.steps || [];
-      $("agent-trace").innerHTML = steps.length
-        ? steps.map((s) => `
-            <div class="trace-step">
-              ${s.thought ? `<div class="th">${escapeHtml(s.thought)}</div>` : ""}
-              ${s.action ? `<div class="act">→ ${escapeHtml(s.action)} ${escapeHtml(JSON.stringify(s.action_input || {}))}</div>` : ""}
-              <div class="obs">${escapeHtml(s.observation || "")}</div>
-            </div>`).join("")
-        : '<span class="muted">No tool calls (the agent answered directly).</span>';
+      if (!steps.length) return;
+      const toggle = document.createElement("div");
+      toggle.className = "trace-toggle";
+      const label = (open) => `${open ? "▾" : "▸"} reasoning (${steps.length} step${steps.length > 1 ? "s" : ""})`;
+      toggle.textContent = label(false);
+      const trace = document.createElement("div");
+      trace.className = "hidden";
+      trace.innerHTML = steps.map((s) => `
+        <div class="trace-step">
+          ${s.thought ? `<div class="th">${escapeHtml(s.thought)}</div>` : ""}
+          ${s.action ? `<div class="act">→ ${escapeHtml(s.action)} ${escapeHtml(JSON.stringify(s.action_input || {}))}</div>` : ""}
+          ${s.observation ? `<div class="obs">${escapeHtml(s.observation)}</div>` : ""}
+        </div>`).join("");
+      toggle.addEventListener("click", () => { const hidden = trace.classList.toggle("hidden"); toggle.textContent = label(!hidden); });
+      el.appendChild(toggle); el.appendChild(trace);
     }
 
-    function renderPrep(data) {
-      $("prep").classList.remove("hidden");
-      chips($("prep-gaps"), data.gaps || [], "bad");
-      const qs = data.questions || [];
-      $("prep-questions").innerHTML = qs.length
-        ? qs.map((q) => `<li>${escapeHtml(q)}</li>`).join("")
-        : '<li class="muted">No questions matched the current filters.</li>';
-      $("prep-guide").innerHTML = renderMarkdown(data.guide || "");
+    function resetChat() {
+      sessionId = null; lastContext = null;
+      $("chat").innerHTML = "";
+      $("context").open = true;
+      setStatus("New chat — current resume/JD will seed it.");
     }
 
-    // Minimal Markdown → HTML for the subset the reports use (headings,
-    // bold/italic/code, lists, tables, rules). Input is HTML-escaped first.
+    function setStatus(msg, isErr) { const el = $("status"); el.textContent = msg || ""; el.className = isErr ? "err" : "hint"; }
+
+    // ── Minimal Markdown → HTML (headings, bold/italic/code, lists, tables) ──
     function mdInline(text) {
       return escapeHtml(text)
         .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
         .replace(/`([^`]+)`/g, "<code>$1</code>")
         .replace(/\*(.+?)\*/g, "<em>$1</em>");
     }
-    function mdRow(line) {
-      return line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
-    }
+    function mdRow(line) { return line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim()); }
     function renderMarkdown(md) {
       const lines = String(md).split("\n");
       const isSep = (s) => s !== undefined && /^\s*\|?[\s:|-]*-{2,}[\s:|-]*$/.test(s);
@@ -397,10 +276,13 @@
         ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
     }
 
-    $("run").addEventListener("click", analyze);
-    $("prep-run").addEventListener("click", interviewPrep);
-    $("ask-run").addEventListener("click", askAgent);
+    $("send").addEventListener("click", send);
+    $("reset").addEventListener("click", resetChat);
     $("add-jd").addEventListener("click", addJdSlot);
+    // Enter sends; Shift+Enter inserts a newline.
+    $("msg").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    });
     addJdSlot(); // seed the first JD slot
   </script>
 </body>

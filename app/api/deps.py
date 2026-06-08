@@ -28,6 +28,14 @@ def get_llm() -> LLMClient:
 
 
 @lru_cache(maxsize=1)
+def get_session_store():
+    """Process-local chat session store (prototype: in-memory, cleared on restart)."""
+    from app.services.agent.sessions import SessionStore
+
+    return SessionStore()
+
+
+@lru_cache(maxsize=1)
 def get_kb_retriever():
     """Knowledge-base retriever (pgvector) behind a cross-encoder reranker.
 

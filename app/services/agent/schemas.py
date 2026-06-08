@@ -83,11 +83,20 @@ class ReactStep:
 
 @dataclass
 class ReactResult:
-    """The outcome of a run."""
+    """The outcome of a run.
+
+    Three terminal shapes:
+      - completed: the LLM emitted a final answer (``answer`` set).
+      - paused: the LLM asked the user a question (``pending_question`` set);
+        resume by filling the last step's observation with the user's reply and
+        calling ``run`` again with the accumulated ``steps``.
+      - incomplete: neither happened within the step budget.
+    """
 
     answer: str
     steps: list[ReactStep] = field(default_factory=list)
     completed: bool = False  # True if the LLM emitted a final answer in budget
+    pending_question: str | None = None  # set when the agent paused to ask the user
 
 
 class ReactDecision(BaseModel):
