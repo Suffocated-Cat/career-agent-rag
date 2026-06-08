@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from app.api import deps
@@ -57,7 +57,7 @@ class CareerAskRequest(BaseModel):
     jds: list[JdInputModel] = Field(
         default_factory=list, description="Multiple JDs to compare"
     )
-    max_steps: int = Field(8, ge=1, le=16, description="Agent step budget")
+    max_steps: int = Field(12, ge=1, le=20, description="Agent step budget")
 
     @model_validator(mode="after")
     def _require_a_jd(self) -> "CareerAskRequest":
@@ -92,6 +92,13 @@ async def career_ask_endpoint(request: CareerAskRequest):
     multiple JDs — based on the question and intermediate results. Returns the
     answer and the full Thought/Action/Observation trace for transparency.
     """
+    llm = deps.get_llm()
+    if not llm.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="The agent requires a configured LLM (set LLM_API_KEY / LLM_MODEL).",
+        )
+
     if request.jds:
         jd_inputs = [
             JdInput(label=j.label or f"Job {chr(65 + i)}", text=j.text)
@@ -106,9 +113,9 @@ async def career_ask_endpoint(request: CareerAskRequest):
         jd_inputs=jd_inputs,
         embedding_service=deps.get_embedding_service(),
         kb_retriever=_kb_retriever_or_none(),
-        llm=deps.get_llm(),
+        llm=llm,
     )
-    agent = build_default_agent(deps.get_llm(), max_steps=request.max_steps)
+    agent = build_default_agent(llm, max_steps=request.max_steps)
     result = agent.run(request.question, state)
     return CareerAskResponse(
         answer=result.answer,

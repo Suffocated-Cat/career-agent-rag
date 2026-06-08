@@ -37,8 +37,33 @@ _SYSTEM = (
     "to call a tool, or:\n"
     '  {"thought": "...", "final_answer": "..."}\n'
     "when the task is complete. Use only the listed tools. If an observation "
-    "reports an error, reason about it and recover. Output JSON only."
+    "reports an error, reason about it and recover. The JD(s) and resume are "
+    "already loaded in working memory — call the tools (which read it) to parse "
+    "and analyze them; do NOT ask the user for inputs that are already loaded. "
+    "Output JSON only."
 )
+
+
+def _state_summary(state: ReactState) -> str:
+    """Describe what's already in working memory, so the model uses the tools
+    instead of asking the user for inputs that are already loaded."""
+    parts: list[str] = []
+    if state.jd is not None:
+        parts.append("JD parsed")
+    elif state.jd_text or state.jd_inputs:
+        parts.append("raw JD loaded (call parse_jd to parse it)")
+    if len(state.jd_inputs) > 1:
+        parts.append(
+            f"{len(state.jd_inputs)} candidate JDs loaded for comparison "
+            "(use compare_jds, then select_jd)"
+        )
+    if state.resume is not None:
+        parts.append("resume parsed")
+    elif state.resume_text:
+        parts.append("raw resume loaded (call parse_resume to parse it)")
+    if state.match is not None:
+        parts.append("match computed")
+    return "; ".join(parts)
 
 
 class ReactAgent:
@@ -54,9 +79,13 @@ class ReactAgent:
         self.tools: dict[str, ReactTool] = {t.name: t for t in tools}
         self.max_steps = max_steps
 
-    def _prompt(self, task: str, steps: list[ReactStep]) -> str:
-        """Render task, tool catalog, and the scratchpad so far."""
-        lines = [f"Task: {task}", "", "Available tools:"]
+    def _prompt(self, task: str, steps: list[ReactStep], state: ReactState) -> str:
+        """Render task, working-memory summary, tool catalog, and scratchpad."""
+        lines = [f"Task: {task}"]
+        summary = _state_summary(state)
+        if summary:
+            lines += ["", f"Working memory: {summary}."]
+        lines += ["", "Available tools:"]
         for tool in self.tools.values():
             lines.append(f"- {tool.name}: {tool.description}")
         scratchpad = format_scratchpad(steps)
@@ -85,7 +114,7 @@ class ReactAgent:
 
         steps: list[ReactStep] = []
         for _ in range(self.max_steps):
-            raw = self.llm.complete(self._prompt(task, steps), system=_SYSTEM)
+            raw = self.llm.complete(self._prompt(task, steps, state), system=_SYSTEM)
 
             try:
                 data = extract_json(raw)

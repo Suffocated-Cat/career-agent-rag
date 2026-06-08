@@ -13,8 +13,8 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 - MCP: stdio server exposing the core tools
 - Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
-- Frontend: minimal static UI served at `/ui/` (paste JD + resume → match report, or RAG interview prep with role/difficulty filters)
-- Tests: `453 passed` with Postgres up (`452 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
+- Frontend: minimal static UI served at `/ui/` (paste resume + one or more JDs → match report, RAG interview prep, or ask the ReAct agent and watch its reasoning trace)
+- Tests: `454 passed` with Postgres up (`453 passed`, 1 DB integration test skipped without it), `97%` coverage on Python 3.11.15
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 

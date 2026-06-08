@@ -110,6 +110,19 @@ def test_career_ask_requires_a_jd(client):
     assert response.json()["status"] == "error"
 
 
+def test_career_ask_requires_configured_llm(client, monkeypatch):
+    """An unconfigured LLM yields a clean 503, not a raw 500."""
+    monkeypatch.setattr("app.api.deps.get_llm", lambda: _UnconfiguredLLM())
+    response = client.post(
+        "/api/v1/career/ask",
+        json={"question": "why?", "jd_text": "JD", "resume_text": "resume"},
+    )
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "error"
+    assert "configured LLM" in body["error"]["message"]
+
+
 def test_career_ask_compares_multiple_jds(client, monkeypatch):
     """Multiple JDs drive the compare_jds tool and return a ranked answer."""
     scripted = _ScriptedLLM([

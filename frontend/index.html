@@ -61,19 +61,39 @@
       border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:14px system-ui, sans-serif; }
     input#role { min-width:220px; }
     #prep-questions { margin:0; padding-left:20px; } #prep-questions li { margin:3px 0; }
+    #agent { display:grid; gap:20px; } #agent.hidden { display:none; }
+    button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line);
+      padding:5px 11px; font-size:13px; font-weight:600; }
+    button.ghost:disabled { color:var(--muted); }
+    .jd-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+    .jd-head label { margin:0; }
+    .jd-slot { margin-bottom:10px; }
+    .jd-slot-head { display:flex; gap:8px; margin-bottom:6px; }
+    .jd-label { flex:1; background:var(--card); color:var(--fg); border:1px solid var(--line);
+      border-radius:8px; padding:7px 10px; font:13px system-ui, sans-serif; }
+    .jd-remove { background:transparent; color:var(--muted); border:1px solid var(--line);
+      border-radius:8px; padding:0 11px; font-size:14px; cursor:pointer; }
+    .jd-slot textarea { min-height:150px; }
+    .trace-step { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+    .trace-step .th { font-size:13px; margin-bottom:5px; }
+    .trace-step .act { color:var(--accent); font:12px/1.5 ui-monospace, monospace; word-break:break-word; }
+    .trace-step .obs { color:var(--muted); font-size:12px; margin-top:5px; white-space:pre-wrap; }
   </style>
 </head>
 <body>
   <header>
     <h1>Career<span>Agent</span></h1>
-    <div class="sub">Paste a job description and a resume — get a match report or RAG interview prep.</div>
+    <div class="sub">Paste a resume and one or more job descriptions — get a match report, RAG interview prep, or ask the ReAct agent.</div>
   </header>
 
   <main>
     <div class="grid">
       <div>
-        <label for="jd">Job description</label>
-        <textarea id="jd" placeholder="Paste the JD text..."></textarea>
+        <div class="jd-head">
+          <label>Job description(s)</label>
+          <button id="add-jd" class="ghost" type="button">+ Add JD</button>
+        </div>
+        <div id="jd-list"></div>
       </div>
       <div>
         <label for="resume">Resume</label>
@@ -91,6 +111,22 @@
         <option value="senior">senior</option>
       </select>
       <span id="status" class="muted"></span>
+    </div>
+
+    <div class="card">
+      <h2>Ask the agent</h2>
+      <label for="question">Question</label>
+      <textarea id="question" style="min-height:80px;"
+        placeholder="e.g. Why isn't my match higher, and how do I fix it?  •  Which of these roles should I apply to?  •  Help me prep for the interview."></textarea>
+      <div class="controls" style="margin-top:10px;">
+        <button id="ask-run">Ask agent</button>
+        <span class="muted" style="font-size:12px;">Uses the resume + JD slot(s) above. Two or more JDs → the agent compares them.</span>
+      </div>
+    </div>
+
+    <div id="agent" class="hidden">
+      <div class="card"><h2>Answer</h2><div id="agent-answer" class="md"></div></div>
+      <div class="card"><h2>Reasoning trace</h2><div id="agent-trace"></div></div>
     </div>
 
     <div id="prep" class="hidden">
@@ -117,9 +153,51 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const MAX_JDS = 3;
+
+    // ── Multi-JD slots ────────────────────────────────────────────────
+    function jdSlotCount() { return $("jd-list").querySelectorAll(".jd-slot").length; }
+
+    function addJdSlot() {
+      const i = jdSlotCount();
+      if (i >= MAX_JDS) return;
+      const slot = document.createElement("div");
+      slot.className = "jd-slot";
+      const letter = String.fromCharCode(65 + i); // A, B, C
+      slot.innerHTML = `
+        <div class="jd-slot-head">
+          <input class="jd-label" placeholder="Job ${letter} (optional label)" />
+          <button class="jd-remove" type="button" title="Remove this JD">✕</button>
+        </div>
+        <textarea class="jd-text" placeholder="Paste the JD text..."></textarea>`;
+      slot.querySelector(".jd-remove").addEventListener("click", () => {
+        slot.remove();
+        refreshJdControls();
+      });
+      $("jd-list").appendChild(slot);
+      refreshJdControls();
+    }
+
+    // The first slot can't be removed; the add button caps at MAX_JDS.
+    function refreshJdControls() {
+      const slots = $("jd-list").querySelectorAll(".jd-slot");
+      slots.forEach((s, idx) => {
+        s.querySelector(".jd-remove").style.visibility = idx === 0 ? "hidden" : "visible";
+      });
+      $("add-jd").disabled = slots.length >= MAX_JDS;
+    }
+
+    // [{label, text}] for non-empty slots (label omitted when blank).
+    function getJds() {
+      return [...$("jd-list").querySelectorAll(".jd-slot")].map((s) => ({
+        label: s.querySelector(".jd-label").value.trim(),
+        text: s.querySelector(".jd-text").value.trim(),
+      })).filter((j) => j.text);
+    }
+    function firstJd() { const j = getJds(); return j.length ? j[0].text : ""; }
 
     async function analyze() {
-      const jd = $("jd").value.trim();
+      const jd = firstJd();
       const resume = $("resume").value.trim();
       if (!jd || !resume) { setStatus("Enter both a job description and a resume.", true); return; }
 
@@ -185,7 +263,7 @@
     }
 
     async function interviewPrep() {
-      const jd = $("jd").value.trim();
+      const jd = firstJd();
       const resume = $("resume").value.trim();
       if (!jd || !resume) { setStatus("Enter both a job description and a resume.", true); return; }
       const roleRaw = $("role").value.trim();
@@ -211,6 +289,55 @@
       } finally {
         $("prep-run").disabled = false;
       }
+    }
+
+    async function askAgent() {
+      const question = $("question").value.trim();
+      const resume = $("resume").value.trim();
+      const jds = getJds();
+      if (!question) { setStatus("Enter a question for the agent.", true); return; }
+      if (!resume || !jds.length) { setStatus("Enter a resume and at least one JD.", true); return; }
+
+      // One JD → single-JD path; several → let the agent compare them.
+      const payload = { question, resume_text: resume };
+      if (jds.length === 1) payload.jd_text = jds[0].text;
+      else payload.jds = jds.map((j) => (j.label ? { text: j.text, label: j.label } : { text: j.text }));
+
+      $("ask-run").disabled = true;
+      setStatus("Agent is reasoning… (it picks tools step by step)");
+      try {
+        const res = await fetch("/api/v1/career/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json();
+        if (!res.ok || body.status === "error") {
+          throw new Error(body.error ? body.error.message : "Request failed (" + res.status + ")");
+        }
+        renderAgent(body);
+        setStatus(body.completed ? "Done." : "Stopped at the step budget — try raising it or simplifying the question.", !body.completed);
+      } catch (e) {
+        setStatus(e.message, true);
+      } finally {
+        $("ask-run").disabled = false;
+      }
+    }
+
+    function renderAgent(body) {
+      $("agent").classList.remove("hidden");
+      $("agent-answer").innerHTML = body.answer
+        ? renderMarkdown(body.answer)
+        : '<span class="muted">No answer was produced.</span>';
+      const steps = body.steps || [];
+      $("agent-trace").innerHTML = steps.length
+        ? steps.map((s) => `
+            <div class="trace-step">
+              ${s.thought ? `<div class="th">${escapeHtml(s.thought)}</div>` : ""}
+              ${s.action ? `<div class="act">→ ${escapeHtml(s.action)} ${escapeHtml(JSON.stringify(s.action_input || {}))}</div>` : ""}
+              <div class="obs">${escapeHtml(s.observation || "")}</div>
+            </div>`).join("")
+        : '<span class="muted">No tool calls (the agent answered directly).</span>';
     }
 
     function renderPrep(data) {
@@ -272,6 +399,9 @@
 
     $("run").addEventListener("click", analyze);
     $("prep-run").addEventListener("click", interviewPrep);
+    $("ask-run").addEventListener("click", askAgent);
+    $("add-jd").addEventListener("click", addJdSlot);
+    addJdSlot(); // seed the first JD slot
   </script>
 </body>
 </html>
