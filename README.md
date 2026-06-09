@@ -9,7 +9,7 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 - Backend: FastAPI service with versioned APIs under `/api/v1`
 - Retrieval: BM25, vector, hybrid fusion, and optional reranking
 - Agent: ReAct loop (Reason → Act → Observe) over the tools (incl. KB search, advice, bullet rewriting, multi-JD comparison), with step tracing and an `ask_user` pause/resume action; exposed for one-shot Q&A (`POST /api/v1/career/ask`) and a streamed multi-turn chat with persistent state + slash commands (`POST /api/v1/career/chat/stream`)
-- LLM: optional OpenAI-compatible client with deterministic fallback
+- LLM: OpenAI-compatible client — optional for the deterministic pipeline (rule/template fallback), required for the ReAct agent
 - MCP: stdio server exposing the core tools
 - Knowledge base: interview-question KB in PostgreSQL + pgvector, powering RAG interview prep
 - Evaluation: retrieval metrics, ablation runner, LLM-as-judge, latency/cost utilities
@@ -24,6 +24,7 @@ Companion notes for learning the codebase and explaining its engineering
 decisions in an interview. **AI-generated study aids — verify against the
 source before relying on them.**
 
+- [`docs/project_architecture_dataflow.md`](docs/project_architecture_dataflow.md) — layered-architecture & data-flow walkthrough (Chinese): component map, core data objects, every key path (parse → match → report → RAG → agent), a per-feature "定义与实现" file index, and the `/career/ask` vs `/career/chat/stream` distinction.
 - [`docs/interview_engineering_notes.md`](docs/interview_engineering_notes.md) — decision-by-decision deep dive (13 sections): architecture, the agent + memory design, parsing/scoring, every model/parameter/threshold choice (with "what if I tune it" and the industry alternatives), retrieval, RAG, the rule-based audit, evaluation, MCP, and the recurring engineering patterns.
 - [`docs/interview_mock_qa.md`](docs/interview_mock_qa.md) — mock interview, ~160 questions across 48 topics in four layers: (1) project-level Q&A with multi-layer follow-up chains; (2) **fundamentals deep dives** (transformer/attention, sentence-embedding training & distillation, BM25 probabilistic roots, HNSW/PQ internals, LLM sampling & KV-cache, async/GIL); (3) **debugging & system-design scenarios** (retrieval-quality regressions, scaling to multi-tenant SaaS, i18n, real-time KB updates); (4) **trap questions** that probe trade-offs to bedrock.
 - [`docs/interview_self_intro.md`](docs/interview_self_intro.md) — a 30-second / 2-minute project pitch script, with hooks that steer follow-up questions toward prepared ground.
@@ -227,6 +228,7 @@ career-agent-rag/
 ├── scripts/                 # ingest_kb.py (embed + upsert KB into pgvector)
 ├── frontend/                # Minimal static UI (index.html)
 ├── docs/                    # AI-generated study & interview notes (verify against source)
+│   ├── project_architecture_dataflow.md # Layered architecture, data flow & per-feature file map
 │   ├── interview_engineering_notes.md # Decision/parameter/threshold deep dive
 │   ├── interview_mock_qa.md           # Mock interview w/ multi-layer follow-up chains
 │   └── interview_self_intro.md        # 30s/2min project pitch script

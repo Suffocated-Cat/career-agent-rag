@@ -29,7 +29,7 @@
 **为什么这么分层（讲三点）：**
 1. **可信/可审计**：招聘是高风险决策，分数必须可复现、可追溯，不能由不确定的 LLM 生成。
 2. **可测试**：分数是确定函数 → 490 个测试能断言精确值；分数若来自 LLM 只能做模糊断言。
-3. **降级可用**：每个 LLM 调用都有 deterministic fallback，没有 API key（`--no-llm`）整条链路照常出结果，LLM 是增强非依赖。
+3. **降级可用**：每个 LLM 调用都有 deterministic fallback，没有 API key（`--no-llm`）确定性匹配链路照常出结果，LLM 在这条链路上是增强非依赖。（例外：ReAct agent 本身 LLM-driven，必须配 LLM，没 LLM 直接 `RuntimeError`。）
 
 **为什么"四入口共享内核"而不是各写各的：** REST / Agent / MCP / CLI 只是**暴露方式**不同，业务逻辑只有一份（`analyze_match` 是 `/match` 端点和 CLI skill 共享的唯一编排点，"so they can't drift apart"）→ 改一处所有入口受益（DRY、单一职责）。
 
