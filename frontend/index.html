@@ -195,6 +195,7 @@
       live.appendChild(liveTrace);
       const steps = [];
       let answer = "";
+      let traceCollapsed = false;
 
       try {
         const res = await fetch("/api/v1/career/chat/stream", {
@@ -213,6 +214,11 @@
             liveTrace.innerHTML = renderSteps(steps);
             live.scrollIntoView({ behavior: "smooth", block: "end" });
           } else if (event === "token") {
+            if (!traceCollapsed) {           // first token: fold live reasoning into a clickable toggle
+              liveTrace.remove();
+              if (steps.length) attachTrace(live, steps);
+              traceCollapsed = true;
+            }
             answer += data.text;
             liveBody.className = "body";       // plain text while typing
             liveBody.textContent = answer;
@@ -225,8 +231,10 @@
         sessionId = done.session_id;
         liveBody.className = "body md";
         liveBody.innerHTML = renderMarkdown(done.reply);
-        liveTrace.remove();
-        if (steps.length) attachTrace(live, steps);
+        if (!traceCollapsed) {               // paths with no streamed tokens (slash / ask_user)
+          liveTrace.remove();
+          if (steps.length) attachTrace(live, steps);
+        }
         setStatus(done.state === "awaiting_user" ? "The agent asked a question — reply below to continue." : "");
         if ($("context").open) $("context").open = false; // tuck the context away once chatting
       } catch (e) {
