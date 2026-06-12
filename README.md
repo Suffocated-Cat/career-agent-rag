@@ -18,17 +18,6 @@ The project is intended as a serious AI backend / RAG engineering prototype: run
 
 Current boundary: this is a backend-first prototype. It does not yet include a production UI, database persistence, authentication, rate limiting, or production observability.
 
-## Study & Interview Notes (`docs/`)
-
-Companion notes for learning the codebase and explaining its engineering
-decisions in an interview. **AI-generated study aids — verify against the
-source before relying on them.**
-
-- [`docs/project_architecture_dataflow.md`](docs/project_architecture_dataflow.md) — layered-architecture & data-flow walkthrough (Chinese): component map, core data objects, every key path (parse → match → report → RAG → agent), a per-feature "定义与实现" file index, and the `/career/ask` vs `/career/chat/stream` distinction.
-- [`docs/interview_engineering_notes.md`](docs/interview_engineering_notes.md) — decision-by-decision deep dive (13 sections): architecture, the agent + memory design, parsing/scoring, every model/parameter/threshold choice (with "what if I tune it" and the industry alternatives), retrieval, RAG, the rule-based audit, evaluation, MCP, and the recurring engineering patterns.
-- [`docs/interview_mock_qa.md`](docs/interview_mock_qa.md) — mock interview, ~160 questions across 48 topics in four layers: (1) project-level Q&A with multi-layer follow-up chains; (2) **fundamentals deep dives** (transformer/attention, sentence-embedding training & distillation, BM25 probabilistic roots, HNSW/PQ internals, LLM sampling & KV-cache, async/GIL); (3) **debugging & system-design scenarios** (retrieval-quality regressions, scaling to multi-tenant SaaS, i18n, real-time KB updates); (4) **trap questions** that probe trade-offs to bedrock.
-- [`docs/interview_self_intro.md`](docs/interview_self_intro.md) — a 30-second / 2-minute project pitch script, with hooks that steer follow-up questions toward prepared ground.
-
 ## Quick Start
 
 Docker is the recommended way to run the project because the app targets Python 3.11+ and depends on ML packages that are easier to reproduce in a container.
@@ -227,11 +216,6 @@ career-agent-rag/
 ├── data/knowledge/          # Curated KB (interview_questions.json)
 ├── scripts/                 # ingest_kb.py (embed + upsert KB into pgvector)
 ├── frontend/                # Minimal static UI (index.html)
-├── docs/                    # AI-generated study & interview notes (verify against source)
-│   ├── project_architecture_dataflow.md # Layered architecture, data flow & per-feature file map
-│   ├── interview_engineering_notes.md # Decision/parameter/threshold deep dive
-│   ├── interview_mock_qa.md           # Mock interview w/ multi-layer follow-up chains
-│   └── interview_self_intro.md        # 30s/2min project pitch script
 ├── docker-compose.yml       # Multi-service orchestration
 └── requirements.txt
 ```

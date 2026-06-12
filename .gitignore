@@ -4,6 +4,9 @@ new_schedule.md
 # Experiments (personal scratch, not part of the project)
 experiments/
 
+# Study/interview notes (personal, not tracked)
+docs/
+
 # Python
 __pycache__/
 *.py[cod]
